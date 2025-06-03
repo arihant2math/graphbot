@@ -1,6 +1,10 @@
+import json
 import mwparserfromhell
 
-text = open("in.txt", "r").read()
+# Without utf-8 encoding, the script may not handle some pages correctly
+text = ""
+with open("in.txt", "r", encoding="utf-8") as f:
+    text = f.read()
 
 templates = mwparserfromhell.parse(text).filter_templates()
 
@@ -11,6 +15,5 @@ for template in templates:
         "params": {str(param.name).strip(): str(param.value).strip() for param in template.params}
     })
 
-with open("out.json", "w") as f:
-    import json
+with open("out.json", "w", encoding="utf-8") as f:
     json.dump({"data": output}, f, indent=2, ensure_ascii=False)

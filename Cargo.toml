@@ -13,3 +13,4 @@ tokio = { version = "1", features = ["full"] }
 reqwest = "0.12"
 url = "2.5"
 toml = "0.8.22"
+anyhow = "1.0.98"

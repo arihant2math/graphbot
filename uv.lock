@@ -1,0 +1,20 @@
+version = 1
+revision = 2
+requires-python = ">=3.13"
+
+[[package]]
+name = "graphport"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "mwparserfromhell" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "mwparserfromhell", specifier = ">=0.6.6" }]
+
+[[package]]
+name = "mwparserfromhell"
+version = "0.6.6"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/aa/358f9af602b743ac8898353f240f678b69722801bd0625507c69d9755936/mwparserfromhell-0.6.6.tar.gz", hash = "sha256:71afec1e9784ba576e95d6f34845582d3c733a3a52ba770dd8a9c3a40e5b649f", size = 138899, upload-time = "2024-01-04T06:40:20.17Z" }

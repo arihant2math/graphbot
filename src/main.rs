@@ -167,6 +167,21 @@ async fn main() -> anyhow::Result<()> {
         .set_oauth2_token(BOT_NAME.to_string(), token)
         .build()
         .await?;
+    if wiki_bot.page(&format!("User:{}/Shutdown", BOT_NAME))?
+        .exists()
+        .await?
+    {
+        eprintln!("This bot has been shut down on {}. Please do not use it.", args.wiki);
+        std::process::exit(1);
+    }
+    if commons_bot.page(&format!("User:{}/Shutdown", BOT_NAME))?
+        .exists()
+        .await?
+    {
+        eprintln!("This bot has been shut down on Commons. Please do not use it.");
+        std::process::exit(1);
+    }
+
     // Download the article
     let page = wiki_bot.page(&args.article).expect("Failed to get page");
     let content_future = page.wikitext();

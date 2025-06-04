@@ -1,80 +1,11 @@
 use crate::TAB_EXT;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use crate::schema::LocalizableString;
+use crate::schema::chart::{Axis, Chart};
+use crate::schema::tab::{Field, Tab};
+use serde_json::{Number, Value};
 use std::collections::HashMap;
 
 const LICENSE: &str = "CC0-1.0";
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct LocalizableString(pub HashMap<String, String>);
-
-impl LocalizableString {
-    fn en(s: String) -> Self {
-        let mut map = HashMap::new();
-        map.insert("en".to_string(), s);
-        Self(map)
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Field {
-    pub name: String,
-    pub r#type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub title: Option<LocalizableString>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Schema {
-    pub fields: Vec<Field>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Tab {
-    pub license: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub description: Option<LocalizableString>,
-    pub schema: Schema,
-    pub data: Vec<Vec<Value>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Axis {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub title: Option<LocalizableString>,
-    pub format: bool,
-}
-
-impl Default for Axis {
-    fn default() -> Self {
-        Axis {
-            title: None,
-            format: true,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Chart {
-    pub license: String,
-    pub version: u64,
-    pub r#type: String,
-    #[serde(rename = "xAxis")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub x_axis: Option<Axis>,
-    #[serde(rename = "yAxis")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub y_axis: Option<Axis>,
-    pub source: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    pub title: Option<LocalizableString>,
-}
 
 // TODO: this should be an enum
 fn convert_graph_chart_type(s: &str) -> &str {
@@ -100,6 +31,37 @@ fn convert_graph_types(s: &str) -> &str {
     }
 }
 
+fn parse_number(value: &str) -> Option<Number> {
+    // Replace the unicode minus sign with a regular hyphen
+    // This was 20 minutes of debugging, because the minus sign was not being parsed correctly
+    let value = value.replace("\u{2212}", "-");
+    if let Ok(i) = value.parse::<i128>() {
+        return Some(Number::from_i128(i)?)
+    } else if let Ok(f) = value.parse::<f64>() {
+        return Some(Number::from_f64(f)?);
+    }
+    None
+}
+
+#[cfg(test)]
+mod number_parse_tests {
+    use super::parse_number;
+    use serde_json::Number;
+
+    #[test]
+    fn test_parse_number() {
+        assert_eq!(parse_number("42"), Number::from_i128(42i128));
+        assert_eq!(parse_number("-42"), Number::from_i128(-42i128));
+        assert_eq!(parse_number("3.14"), Number::from_f64(3.14));
+        assert_eq!(parse_number("-3.14"), Number::from_f64(-3.14));
+        assert_eq!(parse_number("0"), Number::from_i128(0i128));
+        assert_eq!(parse_number("1e3"), Number::from_f64(1000.0));
+        assert_eq!(parse_number("1.5e-2"), Number::from_f64(0.015));
+        assert_eq!(parse_number("not a number"), None);
+        assert_eq!(parse_number(""), None);
+    }
+}
+
 // TODO: ty should be an enum
 fn convert_graph_chart_value(value: &str, ty: &str) -> Value {
     if value.is_empty() {
@@ -107,8 +69,8 @@ fn convert_graph_chart_value(value: &str, ty: &str) -> Value {
     }
     match ty {
         "number" => {
-            if let Ok(num) = value.parse::<f64>() {
-                Value::Number(serde_json::Number::from_f64(num).unwrap())
+            if let Some(num) = parse_number(value) {
+                Value::Number(num)
             } else {
                 Value::String(value.to_string())
             }
@@ -184,7 +146,7 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
             title: tag
                 .get("yAxisTitle")
                 .cloned()
-                .unwrap_or_default()
+                .flatten()
                 .map(|s| LocalizableString::en(s)),
         };
         fields.push(y_field);
@@ -193,9 +155,11 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
             name: "y1".to_string(),
             r#type: y_type.clone(),
             title: tag
-                .get("yAxisTitle")
+                .get("y1Title")
                 .cloned()
-                .unwrap_or_default()
+                .flatten()
+                // yAxisTitle is a fallback
+                .or_else(|| tag.get("yAxisTitle").cloned().flatten())
                 .map(|s| LocalizableString::en(s)),
         };
         fields.push(y_field);
@@ -272,7 +236,7 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
             .cloned()
             .unwrap_or_default()
             .map(|s| LocalizableString::en(s)),
-        schema: Schema { fields },
+        schema: fields.into(),
         data: x_values
             .into_iter()
             .enumerate()
@@ -290,12 +254,26 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
             .collect(),
     };
     let tab_file_name = format!("{}{TAB_EXT}", name);
+    let x_axis = match tag.get("xAxisTitle") {
+        Some(Some(title)) => Some(Axis {
+            title: Some(LocalizableString::en(title.clone())),
+            ..Axis::default()
+        }),
+        _ => None,
+    };
+    let y_axis = match tag.get("yAxisTitle") {
+        Some(Some(title)) => Some(Axis {
+            title: Some(LocalizableString::en(title.clone())),
+            ..Axis::default()
+        }),
+        _ => None,
+    };
     let chart = Chart {
         license: LICENSE.to_string(),
         version: 1,
         r#type: convert_graph_chart_type(&chart_type).to_string(),
-        x_axis: None,
-        y_axis: None,
+        x_axis,
+        y_axis,
         source: tab_file_name,
         title: Some(
             tag.get("title")

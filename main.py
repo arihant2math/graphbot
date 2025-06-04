@@ -12,7 +12,8 @@ output = []
 for template in templates:
     output.append({
         "name": str(template.name).strip(),
-        "params": {str(param.name).strip(): str(param.value).strip() for param in template.params}
+        "params": {str(param.name).strip(): str(param.value).strip() for param in template.params},
+        "wikitext": str(template).strip()
     })
 
 with open("out.json", "w", encoding="utf-8") as f:

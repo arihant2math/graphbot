@@ -1,11 +1,12 @@
 mod convert;
+pub mod schema;
 
 use crate::convert::handle_graph_chart;
+use anyhow::Context;
 use clap::Parser;
 use mwbot::{Bot, SaveOptions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use anyhow::Context;
 
 pub const TAB_EXT: &str = ".tab";
 pub const CHART_EXT: &str = ".chart";
@@ -19,10 +20,11 @@ struct Args {
     wiki: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct Template {
     pub name: String,
     pub params: HashMap<String, Option<String>>,
+    pub wikitext: String
 }
 
 #[derive(Serialize, Deserialize)]
@@ -39,34 +41,26 @@ struct Config {
     client_id: String,
 }
 
-async fn create_pages(
-    bot: &Bot,
-    template: Template,
-    name: &str,
-) -> anyhow::Result<()> {
+async fn create_pages(bot: &Bot, template: Template, name: &str) -> anyhow::Result<()> {
     let file_name = name.replace(" ", "_");
     let tab_file_name = format!("Data:{}{TAB_EXT}", file_name);
     let chart_file_name = format!("Data:{}{CHART_EXT}", file_name);
-    let out = handle_graph_chart(name.to_string(), template.params);
+    let mut modded_template = template.clone();
+    // width is handled separately
+    modded_template.params.remove("width");
+    let out = handle_graph_chart(name.to_string(), modded_template.params);
 
     // Save the tab and chart files
     let tab_text = serde_json::to_string_pretty(&out.tab)?;
     let tab_file_page = bot.page(&format!("{tab_file_name}"))?;
     if !tab_file_page.exists().await? {
-        let confirm = inquire::Confirm::new(&format!(
-            "Create tab file {}?",
-            tab_file_name
-        )).with_default(true).prompt()?;
-        if !confirm {
-            println!("Tab file creation cancelled.");
-            return Ok(());
-        }
         match tab_file_page
             .save(
                 tab_text,
                 &SaveOptions::summary("GraphPort: Create tab file").mark_as_bot(true),
             )
-            .await {
+            .await
+        {
             Ok(_) => println!("Tab file {} created successfully.", tab_file_name),
             Err(e) => {
                 eprintln!("Failed to create tab file {}: {}", tab_file_name, e);
@@ -86,20 +80,13 @@ async fn create_pages(
     let chart_text = serde_json::to_string_pretty(&out.chart)?;
     let chart_file_page = bot.page(&format!("{chart_file_name}"))?;
     if !chart_file_page.exists().await? {
-        let confirm = inquire::Confirm::new(&format!(
-            "Create chart file {}?",
-            chart_file_name
-        )).with_default(true).prompt()?;
-        if !confirm {
-            println!("Chart file creation cancelled.");
-            return Ok(());
-        }
         match chart_file_page
             .save(
                 chart_text,
                 &SaveOptions::summary("GraphPort: Create chart file").mark_as_bot(true),
             )
-            .await {
+            .await
+        {
             Ok(_) => println!("Chart file {} created successfully.", chart_file_name),
             Err(e) => {
                 eprintln!("Failed to create chart file {}: {}", chart_file_name, e);
@@ -117,14 +104,44 @@ async fn create_pages(
         );
     }
     println!("Successfully created tab and chart files for {}.", name);
-    println!("Usage: {{{{}}#chart:{name}.chart{{}}}}");
+    let inside = if let Some(width) = template.params.get("width").cloned().flatten() {
+        format!("ChartDisplay|Definition={name}{CHART_EXT}|Width={width}")
+    } else {
+        format!("ChartDisplay|Definition={name}{CHART_EXT}")
+    };
+    println!("Usage: {}{inside}{}", "{{", "}}");
+
     Ok(())
 }
 
-async fn handle_template(bot: &Bot, parsed: Template) -> anyhow::Result<()> {
+async fn handle_template(bot: &Bot, parsed: Template, args: &Args) -> anyhow::Result<()> {
     match &*parsed.name {
         "Graph:Chart" | "GraphChart" => {
-            let name = inquire::Text::new("Enter chart name:").prompt()?;
+            let name = if args.article.starts_with("Demographics") && parsed.params.get("yAxisTitle").cloned().flatten().is_some() {
+                let country = args.article.clone().split(" ").last().unwrap().to_string();
+                let y_axis_title = parsed.params.get("yAxisTitle").cloned().flatten().unwrap_or_default();
+                let y1_title = parsed.params.get("y1Title").cloned().flatten().unwrap_or_default();
+
+                let default = if y1_title == "Total Fertility Rate" && y_axis_title == "TFR" {
+                    Some("TFR")
+                } else if y1_title.starts_with("population") {
+                    Some("Total Population")
+                } else if y1_title == "Natural change (per 1000)" {
+                    Some("Population Change")
+                } else if y1_title == "Infant Mortality (per 1000 live births)" {
+                    Some("Infant Mortality Rate")
+                } else {
+                    None
+                };
+                if let Some(default) = default {
+                    let text = format!("{country} {default}");
+                    inquire::Text::new("Enter chart name:").with_default(&text).prompt()?
+                } else {
+                    inquire::Text::new("Enter chart name:").prompt()?
+                }
+            } else {
+                inquire::Text::new("Enter chart name:").prompt()?
+            };
             let confirm = inquire::Confirm::new(&format!("Create chart with name {name}?"))
                 .with_default(true)
                 .prompt()?;
@@ -132,7 +149,17 @@ async fn handle_template(bot: &Bot, parsed: Template) -> anyhow::Result<()> {
                 println!("Chart creation cancelled.");
                 return Ok(());
             }
-            create_pages(bot, parsed, &name).await.context("Failed to generate/create pages")?;
+            create_pages(bot, parsed, &name)
+                .await
+                .context("Failed to generate/create pages")?;
+        }
+        "ConvertGraphChart" => {
+            let name = parsed.params.get("name").cloned().flatten().ok_or_else(|| {
+                anyhow::anyhow!("'name' parameter is required for ConvertGraphChart")
+            })?;
+            create_pages(bot, parsed, &name)
+                .await
+                .context("Failed to generate/create pages")?;
         }
         _ => {
             // println!("Unknown tag: {}", parsed.name);
@@ -215,8 +242,8 @@ async fn main() -> anyhow::Result<()> {
     let input = std::fs::read_to_string("out.json").expect("Failed to read out.json");
     let templates: OutRoot = serde_json::from_str(&input).expect("Failed to parse JSON");
     for parsed in templates.data {
-        match handle_template(&commons_bot, parsed).await {
-            Ok(_) => {},
+        match handle_template(&commons_bot, parsed, &args).await {
+            Ok(_) => {}
             Err(e) => eprintln!("Error handling template: {}", e),
         }
     }

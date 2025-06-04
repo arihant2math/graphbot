@@ -4,6 +4,7 @@ use crate::schema::chart::{Axis, Chart};
 use crate::schema::tab::{Field, Tab};
 use serde_json::{Number, Value};
 use std::collections::HashMap;
+use log::warn;
 
 const LICENSE: &str = "CC0-1.0";
 
@@ -11,11 +12,11 @@ const LICENSE: &str = "CC0-1.0";
 fn convert_graph_chart_type(s: &str) -> &str {
     match s {
         "line" => "line",
-        "bar" => "bar",
+        "bar" | "rect" => "bar",
         "area" => "area",
         "pie" => "pie",
         _ => {
-            println!("WARNING: Unknown chart type '{}', defaulting to 'line'.", s);
+            warn!("Unknown chart type '{}', defaulting to 'line'.", s);
             "line"
         }
     }
@@ -83,8 +84,8 @@ fn convert_graph_chart_value(value: &str, ty: &str) -> Value {
 macro_rules! warn_unsupported_attr {
     ($tag:expr, $attr:expr) => {
         if $tag.contains_key($attr) {
-            println!(
-                "WARNING: '{}' attribute is not supported by the chart extension.",
+            warn!(
+                "'{}' attribute is not supported by the chart extension.",
                 $attr
             );
         }

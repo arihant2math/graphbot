@@ -2,5 +2,5 @@
 /target
 *.chart
 *.tab
+*.log
 conf/secret.toml
-

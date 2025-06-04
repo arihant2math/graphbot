@@ -30,16 +30,23 @@ pub struct Config {
 
 impl Config {
     pub fn load() -> anyhow::Result<Self> {
-        let Secret { access_token, client_secret, client_id } =
-            toml::from_str(&std::fs::read_to_string(SECRET_FILE)?)?;
-        let Main { search_category, username, wiki } = toml::from_str(&std::fs::read_to_string(MAIN_FILE)?)?;
+        let Secret {
+            access_token,
+            client_secret,
+            client_id,
+        } = toml::from_str(&std::fs::read_to_string(SECRET_FILE)?)?;
+        let Main {
+            search_category,
+            username,
+            wiki,
+        } = toml::from_str(&std::fs::read_to_string(MAIN_FILE)?)?;
         Ok(Config {
             access_token,
             client_secret,
             client_id,
             search_category,
             username,
-            wiki
+            wiki,
         })
     }
 }

@@ -1,20 +1,20 @@
-mod convert;
-pub mod schema;
 mod config;
+mod convert;
 mod parser;
+pub mod schema;
 
+use crate::config::Config;
 use crate::convert::handle_graph_chart;
-use anyhow::{bail, Context};
+use crate::parser::call_parser;
+use anyhow::{Context, bail};
 use clap::Parser;
+use log::{LevelFilter, debug, error, info, warn};
+use mwbot::generators::{CategoryMemberSort, CategoryMembers, Generator};
 use mwbot::{Bot, Page, SaveOptions};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use log::{debug, error, info, warn, LevelFilter};
-use mwbot::generators::{CategoryMemberSort, CategoryMembers, Generator};
 use tokio::time::sleep;
-use crate::config::Config;
-use crate::parser::call_parser;
 
 pub const TAB_EXT: &str = ".tab";
 pub const CHART_EXT: &str = ".chart";
@@ -23,7 +23,7 @@ pub const CHART_EXT: &str = ".chart";
 struct Template {
     pub name: String,
     pub params: HashMap<String, Option<String>>,
-    pub wikitext: String
+    pub wikitext: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -112,9 +112,14 @@ struct Swap {
 async fn handle_template(bot: &Bot, parsed: Template) -> anyhow::Result<Option<Swap>> {
     match &*parsed.name {
         "PortGraph" => {
-            let name = parsed.params.get("name").cloned().flatten().ok_or_else(|| {
-                anyhow::anyhow!("'name' parameter is required for ConvertGraphChart")
-            })?;
+            let name = parsed
+                .params
+                .get("name")
+                .cloned()
+                .flatten()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("'name' parameter is required for ConvertGraphChart")
+                })?;
             let swap = create_pages(bot, &parsed, &name)
                 .await
                 .context("Failed to generate/create pages")?;
@@ -123,18 +128,20 @@ async fn handle_template(bot: &Bot, parsed: Template) -> anyhow::Result<Option<S
                 to: swap,
             }))
         }
-        _ => {
-            Ok(None)
-        }
+        _ => Ok(None),
     }
 }
 
 async fn check_shutdown(bot: &Bot, wiki: &str, config: &Config) -> anyhow::Result<()> {
-    if bot.page(&format!("User:{}/Shutdown", config.username))?
+    if bot
+        .page(&format!("User:{}/Shutdown", config.username))?
         .exists()
         .await?
     {
-        error!("This bot has been shut down on {}. Please do not use it.", wiki);
+        error!(
+            "This bot has been shut down on {}. Please do not use it.",
+            wiki
+        );
         std::process::exit(1);
     }
     Ok(())
@@ -208,16 +215,15 @@ fn init_logging(_config: &Config) {
         .build("graphport.log")
         .expect("Failed to create file appender");
     let config = log4rs::Config::builder()
-        .appender(log4rs::config::Appender::builder()
-            .build("stdout", Box::new(stdout)))
-        .appender(log4rs::config::Appender::builder()
-            .build("file", Box::new(file)))
-        .logger(log4rs::config::Logger::builder()
-            .build("graphport", LevelFilter::Info))
-        .build(log4rs::config::Root::builder()
-            .appender("stdout")
-            .appender("file")
-            .build(LevelFilter::Info))
+        .appender(log4rs::config::Appender::builder().build("stdout", Box::new(stdout)))
+        .appender(log4rs::config::Appender::builder().build("file", Box::new(file)))
+        .logger(log4rs::config::Logger::builder().build("graphport", LevelFilter::Info))
+        .build(
+            log4rs::config::Root::builder()
+                .appender("stdout")
+                .appender("file")
+                .build(LevelFilter::Info),
+        )
         .expect("Failed to create log4rs config");
     log4rs::init_config(config).expect("Failed to initialize logging");
 }
@@ -241,17 +247,18 @@ async fn main() -> anyhow::Result<()> {
         "https://commons.wikimedia.org/w/api.php".to_string(),
         "https://commons.wikimedia.org/api/rest_v1".to_string(),
     )
-        .set_user_agent("GraphPort/1".to_string())
-        .set_mark_as_bot(true)
-        .set_oauth2_token(config.username.clone(), token)
-        .build()
-        .await?;
+    .set_user_agent("GraphPort/1".to_string())
+    .set_mark_as_bot(true)
+    .set_oauth2_token(config.username.clone(), token)
+    .build()
+    .await?;
 
     loop {
         check_shutdown(&commons_bot, "https://commons.wikimedia.org/", &config).await?;
         check_shutdown(&wiki_bot, &config.wiki, &config).await?;
         // Get the list of articles to process
-        let generator = CategoryMembers::new(&config.search_category).sort(CategoryMemberSort::Timestamp);
+        let generator =
+            CategoryMembers::new(&config.search_category).sort(CategoryMemberSort::Timestamp);
         let mut output = generator.generate(&wiki_bot);
         if let Some(Ok(o)) = output.recv().await {
             let title = o.title().to_string();

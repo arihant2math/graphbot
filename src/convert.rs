@@ -2,9 +2,9 @@ use crate::TAB_EXT;
 use crate::schema::LocalizableString;
 use crate::schema::chart::{Axis, Chart};
 use crate::schema::tab::{Field, Tab};
+use log::warn;
 use serde_json::{Number, Value};
 use std::collections::HashMap;
-use log::warn;
 
 const LICENSE: &str = "CC0-1.0";
 
@@ -37,7 +37,7 @@ fn parse_number(value: &str) -> Option<Number> {
     // This was 20 minutes of debugging, because the minus sign was not being parsed correctly
     let value = value.replace("\u{2212}", "-");
     if let Ok(i) = value.parse::<i128>() {
-        return Some(Number::from_i128(i)?)
+        return Some(Number::from_i128(i)?);
     } else if let Ok(f) = value.parse::<f64>() {
         return Some(Number::from_f64(f)?);
     }

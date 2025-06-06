@@ -9,6 +9,10 @@ fn is_default_axis_format(format: &str) -> bool {
     format == "None"
 }
 
+fn default_version() -> u64 {
+    1
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Axis {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -29,10 +33,20 @@ impl Default for Axis {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChartType {
+    Line,
+    Pie,
+    Bar,
+    Area,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chart {
     pub license: String,
+    #[serde(default = "default_version")]
     pub version: u64,
-    pub r#type: String,
+    pub r#type: ChartType,
     #[serde(rename = "xAxis")]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
@@ -45,4 +59,18 @@ pub struct Chart {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub title: Option<LocalizableString>,
+}
+
+impl Default for Chart {
+    fn default() -> Self {
+        Chart {
+            license: <_>::default(),
+            version: default_version(),
+            r#type: <_>::default(),
+            source: <_>::default(),
+            x_axis: None,
+            y_axis: None,
+            title: None,
+        }
+    }
 }

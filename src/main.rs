@@ -1,13 +1,12 @@
 mod config;
-mod convert;
+mod convert_graph;
+mod convert_pie_chart;
 mod parser;
 pub mod schema;
 
 use crate::config::Config;
-use crate::convert::handle_graph_chart;
 use crate::parser::call_parser;
 use anyhow::{Context, bail};
-use clap::Parser;
 use log::{LevelFilter, debug, error, info, warn};
 use mwbot::generators::{CategoryMemberSort, CategoryMembers, Generator};
 use mwbot::{Bot, Page, SaveOptions};
@@ -32,17 +31,17 @@ struct OutRoot {
 }
 
 async fn create_pages(bot: &Bot, template: &Template, name: &str) -> anyhow::Result<String> {
-    let file_name = name.replace(" ", "_");
-    let tab_file_name = format!("Data:{}{TAB_EXT}", file_name);
-    let chart_file_name = format!("Data:{}{CHART_EXT}", file_name);
+    let file_name = name.replace(' ', "_");
+    let tab_file_name = format!("Data:{file_name}{TAB_EXT}");
+    let chart_file_name = format!("Data:{file_name}{CHART_EXT}");
     let mut modded_template = template.clone();
     // width is handled separately
     modded_template.params.remove("width");
-    let out = handle_graph_chart(name.to_string(), modded_template.params);
+    let out = convert_graph::handle(name, &modded_template.params)?;
 
     // Save the tab and chart files
     let tab_text = serde_json::to_string_pretty(&out.tab)?;
-    let tab_file_page = bot.page(&format!("{tab_file_name}"))?;
+    let tab_file_page = bot.page(&tab_file_name)?;
     if !tab_file_page.exists().await? {
         match tab_file_page
             .save(
@@ -51,9 +50,9 @@ async fn create_pages(bot: &Bot, template: &Template, name: &str) -> anyhow::Res
             )
             .await
         {
-            Ok(_) => info!("Tab file {} created successfully.", tab_file_name),
+            Ok(_) => info!("Tab file {tab_file_name} created successfully."),
             Err(e) => {
-                error!("Failed to create tab file {}: {}", tab_file_name, e);
+                error!("Failed to create tab file {tab_file_name}: {e}");
                 warn!("Please create the tab file manually.");
                 warn!(
                     "Tab file content ({tab_file_name}):\n{}",
@@ -63,13 +62,10 @@ async fn create_pages(bot: &Bot, template: &Template, name: &str) -> anyhow::Res
             }
         }
     } else {
-        warn!(
-            "Tab file {} already exists, skipping creation.",
-            tab_file_name
-        );
+        warn!("Tab file {tab_file_name} already exists, skipping creation.");
     }
     let chart_text = serde_json::to_string_pretty(&out.chart)?;
-    let chart_file_page = bot.page(&format!("{chart_file_name}"))?;
+    let chart_file_page = bot.page(&chart_file_name)?;
     if !chart_file_page.exists().await? {
         match chart_file_page
             .save(
@@ -78,9 +74,9 @@ async fn create_pages(bot: &Bot, template: &Template, name: &str) -> anyhow::Res
             )
             .await
         {
-            Ok(_) => info!("Chart file {} created successfully.", chart_file_name),
+            Ok(_) => info!("Chart file {chart_file_name} created successfully."),
             Err(e) => {
-                error!("Failed to create chart file {}: {}", chart_file_name, e);
+                error!("Failed to create chart file {chart_file_name}: {e}");
                 warn!("Please create the chart file manually.");
                 warn!(
                     "Chart file content ({chart_file_name}):\n{}",
@@ -90,16 +86,13 @@ async fn create_pages(bot: &Bot, template: &Template, name: &str) -> anyhow::Res
             }
         }
     } else {
-        warn!(
-            "Chart file {} already exists, skipping creation.",
-            chart_file_name
-        );
+        warn!("Chart file {chart_file_name} already exists, skipping creation.");
     }
-    info!("Successfully created tab and chart files for {}.", name);
+    info!("Successfully created tab and chart files for {name}.");
     let inside = if let Some(width) = template.params.get("width").cloned().flatten() {
-        format!("ChartDisplay|Definition={name}{CHART_EXT}|Data={name}{TAB_EXT}|Width={width}")
+        format!("ChartDisplay|definition={name}{CHART_EXT}|data={name}{TAB_EXT}|Width={width}")
     } else {
-        format!("ChartDisplay|Definition={name}{CHART_EXT}|Data={name}{TAB_EXT}")
+        format!("ChartDisplay|definition={name}{CHART_EXT}|data={name}{TAB_EXT}")
     };
     Ok(format!("{}{inside}{}", "{{", "}}"))
 }
@@ -109,17 +102,47 @@ struct Swap {
     to: String,
 }
 
-async fn handle_template(bot: &Bot, parsed: Template) -> anyhow::Result<Option<Swap>> {
+async fn handle_template(bot: &Bot, parsed: Template, title: &str) -> anyhow::Result<Option<Swap>> {
+    let mut parsed = parsed;
     match &*parsed.name {
         "PortGraph" => {
-            let name = parsed
-                .params
-                .get("name")
-                .cloned()
-                .flatten()
-                .ok_or_else(|| {
-                    anyhow::anyhow!("'name' parameter is required for ConvertGraphChart")
-                })?;
+            let mut name = parsed.params.get("name").cloned().flatten();
+
+            // Special handling for demographics related pages
+            if name.is_none() && title.starts_with("Demographics of ") {
+                // now we need to extract the name from the title
+                let country = title.trim_start_matches("Demographics of").trim();
+                let country = country.trim_start_matches("the").trim();
+                if country.is_empty() {
+                    bail!("Country name empty, unreachable");
+                }
+                match &*parsed.params.get("y1Title").cloned().flatten().ok_or_else(|| {
+                    anyhow::anyhow!("'y1Title' parameter is required for PortGraph on demographics pages without template graph name")
+                })?.to_ascii_lowercase() {
+                    "population (million)" => {
+                        name = Some(format!("{country} Total Population"));
+                    }
+                    "natural change (per 1000)" => {
+                        name = Some(format!("{country} Population Change"));
+                    }
+                    "infant mortality (per 1000 live births)" => {
+                        name = Some(format!("{country} Infant Mortality"));
+                    }
+                    "total fertility rate" => {
+                        name = Some(format!("{country} TFR"));
+                        if !parsed.params.contains_key("title") {
+                            parsed.params.insert("title".to_string(), Some("Total Fertility Rate".to_string()));
+                        }
+                    }
+                    _ => {
+                        bail!("Unsupported y1Title for demographics page: {}", parsed.params.get("y1Title").cloned().flatten().unwrap_or_default());
+                    }
+                }
+            }
+
+            let name = name.ok_or_else(|| {
+                anyhow::anyhow!("'name' parameter is required for ConvertGraphChart")
+            })?;
             let swap = create_pages(bot, &parsed, &name)
                 .await
                 .context("Failed to generate/create pages")?;
@@ -147,7 +170,12 @@ async fn check_shutdown(bot: &Bot, wiki: &str, config: &Config) -> anyhow::Resul
     Ok(())
 }
 
-async fn run_on_page(page: Page, commons_bot: &Bot, _wiki_bot: &Bot) -> anyhow::Result<()> {
+async fn run_on_page(
+    page: Page,
+    commons_bot: &Bot,
+    _wiki_bot: &Bot,
+    config: &Config,
+) -> anyhow::Result<()> {
     info!("Processing page: {}", page.title());
     // Download the article
     let content_future = page.wikitext();
@@ -161,18 +189,22 @@ async fn run_on_page(page: Page, commons_bot: &Bot, _wiki_bot: &Bot) -> anyhow::
         }
     };
     let (content, _) = tokio::join!(content_future, rm_future);
-    let content = content.expect("Failed to get wikitext");
-    let input = call_parser(&content)?;
-    let templates: OutRoot = serde_json::from_str(&input).expect("Failed to parse JSON");
+    let content = content.context("Failed to get wikitext")?;
+    let input = call_parser(&content, config)?;
+    let templates: OutRoot = serde_json::from_str(&input).context("Failed to parse JSON")?;
     let mut swaps = vec![];
+    let mut errors = vec![];
     for parsed in templates.data {
-        match handle_template(&commons_bot, parsed).await {
+        match handle_template(commons_bot, parsed, page.title()).await {
             Ok(s) => {
                 if let Some(swap) = s {
                     swaps.push(swap);
                 }
             }
-            Err(e) => error!("Error handling template: {}", e),
+            Err(error) => {
+                error!("Error handling template: {error}");
+                errors.push(error);
+            }
         }
     }
     let mut modified_wikitext = content.clone();
@@ -184,18 +216,23 @@ async fn run_on_page(page: Page, commons_bot: &Bot, _wiki_bot: &Bot) -> anyhow::
         }
     }
     // Save the modified wikitext back to the page
+    let title = page.title().to_string();
     if modified_wikitext != content {
         let save_options = SaveOptions::summary("Port graphs to charts").mark_as_bot(true);
-        let title = page.title().to_string();
         match page.save(modified_wikitext, &save_options).await {
-            Ok(_) => info!("Successfully updated page {}", title),
+            Ok(_) => info!("Successfully updated page {title}"),
             Err(e) => {
-                error!("Failed to update page {}: {}", title, e);
-                bail!("Failed to update page {}", title);
+                error!("Failed to update page {title}: {e}");
+                bail!("Failed to update page {title}");
             }
         }
     } else {
-        info!("No changes made to page {}", page.title());
+        info!("No changes made to page {title}");
+    }
+    if !errors.is_empty() {
+        return Err(anyhow::anyhow!(
+            "Errors occurred while processing page {title}: {errors:?}"
+        ));
     }
     Ok(())
 }
@@ -204,13 +241,13 @@ fn init_logging(_config: &Config) {
     let stdout = log4rs::append::console::ConsoleAppender::builder()
         .encoder(Box::new(log4rs::encode::pattern::PatternEncoder::new(
             // Colorize the output
-            "{d(%Y-%m-%d %H:%M:%S)} [{l}] {m}{n}",
+            "[{h({l})} {M} {d(%Y-%m-%d %H:%M:%S)}] {m}{n}",
         )))
         .build();
     // File with the rest
     let file = log4rs::append::file::FileAppender::builder()
         .encoder(Box::new(log4rs::encode::pattern::PatternEncoder::new(
-            "{d(%Y-%m-%d %H:%M:%S)} [{l}] {m}{n}",
+            "[{l} {M} {d(%Y-%m-%d %H:%M:%S)}] {m}{n}",
         )))
         .build("graphport.log")
         .expect("Failed to create file appender");
@@ -253,6 +290,9 @@ async fn main() -> anyhow::Result<()> {
     .build()
     .await?;
 
+    // TODO: impl
+    // let mut failed_revs = HashMap::new();
+
     loop {
         check_shutdown(&commons_bot, "https://commons.wikimedia.org/", &config).await?;
         check_shutdown(&wiki_bot, &config.wiki, &config).await?;
@@ -262,13 +302,17 @@ async fn main() -> anyhow::Result<()> {
         let mut output = generator.generate(&wiki_bot);
         if let Some(Ok(o)) = output.recv().await {
             let title = o.title().to_string();
-            match run_on_page(o, &commons_bot, &wiki_bot).await {
-                Ok(_) => debug!("Successfully processed page: {title}"),
-                Err(e) => error!("Error processing page {title}: {}", e),
+            match run_on_page(o, &commons_bot, &wiki_bot, &config).await {
+                Ok(_) => {
+                    debug!("Successfully processed page: {title}");
+                }
+                Err(error) => {
+                    error!("Error processing page {title}: {error}");
+                }
             }
-            sleep(Duration::from_secs(9)).await;
         } else {
             info!("No articles found in {}", config.search_category);
+            sleep(Duration::from_secs(9)).await;
         }
         sleep(Duration::from_secs(1)).await;
     }

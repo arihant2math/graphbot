@@ -12,10 +12,17 @@ struct Secret {
 const MAIN_FILE: &str = "conf/main.toml";
 
 #[derive(Deserialize, Serialize, Debug)]
+pub struct Rpc {
+    pub port: u16,
+    pub path: String,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
 struct Main {
     pub search_category: String,
     pub username: String,
     pub wiki: String,
+    pub rpc: Rpc,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -26,6 +33,7 @@ pub struct Config {
     pub search_category: String,
     pub username: String,
     pub wiki: String,
+    pub rpc: Rpc,
 }
 
 impl Config {
@@ -39,6 +47,7 @@ impl Config {
             search_category,
             username,
             wiki,
+            rpc,
         } = toml::from_str(&std::fs::read_to_string(MAIN_FILE)?)?;
         Ok(Config {
             access_token,
@@ -47,6 +56,7 @@ impl Config {
             search_category,
             username,
             wiki,
+            rpc,
         })
     }
 }

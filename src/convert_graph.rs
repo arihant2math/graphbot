@@ -1,33 +1,31 @@
 use crate::TAB_EXT;
 use crate::schema::LocalizableString;
-use crate::schema::chart::{Axis, Chart};
+use crate::schema::chart::{Axis, Chart, ChartType};
 use crate::schema::tab::{Field, Tab};
+use anyhow::anyhow;
 use log::warn;
 use serde_json::{Number, Value};
 use std::collections::HashMap;
 
 const LICENSE: &str = "CC0-1.0";
 
-// TODO: this should be an enum
-fn convert_graph_chart_type(s: &str) -> &str {
-    match s {
-        "line" => "line",
-        "bar" | "rect" => "bar",
-        "area" => "area",
-        "pie" => "pie",
+fn convert_graph_chart_type(s: &str) -> ChartType {
+    match &*s.to_ascii_lowercase() {
+        "line" => ChartType::Line,
+        "bar" | "rect" => ChartType::Bar,
+        "area" => ChartType::Area,
+        "pie" => ChartType::Pie,
         _ => {
-            warn!("Unknown chart type '{}', defaulting to 'line'.", s);
-            "line"
+            warn!("Unknown chart type '{s}', defaulting to 'line'.");
+            ChartType::Line
         }
     }
 }
 
 fn convert_graph_types(s: &str) -> &str {
     match s {
-        "integer" => "number",
-        "number" => "number",
-        "date" => "string",
-        "string" => "string",
+        "integer" | "number" => "number",
+        "date" | "string" => "string",
         _ => "string",
     }
 }
@@ -37,9 +35,9 @@ fn parse_number(value: &str) -> Option<Number> {
     // This was 20 minutes of debugging, because the minus sign was not being parsed correctly
     let value = value.replace("\u{2212}", "-");
     if let Ok(i) = value.parse::<i128>() {
-        return Some(Number::from_i128(i)?);
+        return Number::from_i128(i);
     } else if let Ok(f) = value.parse::<f64>() {
-        return Some(Number::from_f64(f)?);
+        return Number::from_f64(f);
     }
     None
 }
@@ -97,7 +95,10 @@ pub struct ConversionOutput {
     pub tab: Tab,
 }
 
-pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) -> ConversionOutput {
+pub fn handle(
+    name: &str,
+    tag: &HashMap<String, Option<String>>,
+) -> anyhow::Result<ConversionOutput> {
     warn_unsupported_attr!(tag, "colors");
     warn_unsupported_attr!(tag, "width");
     warn_unsupported_attr!(tag, "height");
@@ -108,8 +109,8 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
     let chart_type = tag
         .get("type")
         .cloned()
-        .unwrap_or_default()
-        .expect("'type' attribute not present");
+        .flatten()
+        .ok_or_else(|| anyhow!("'type' attribute not present"))?;
     if chart_type == "pie" {
         unimplemented!()
     } else if chart_type.starts_with("stacked") {
@@ -138,7 +139,7 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
             .get("xAxisTitle")
             .cloned()
             .unwrap_or_default()
-            .map(|s| LocalizableString::en(s)),
+            .map(LocalizableString::en),
     }];
     if tag.contains_key("y") {
         let y_field = Field {
@@ -148,7 +149,7 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
                 .get("yAxisTitle")
                 .cloned()
                 .flatten()
-                .map(|s| LocalizableString::en(s)),
+                .map(LocalizableString::en),
         };
         fields.push(y_field);
     } else if tag.contains_key("y1") && !tag.contains_key("y2") {
@@ -161,7 +162,7 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
                 .flatten()
                 // yAxisTitle is a fallback
                 .or_else(|| tag.get("yAxisTitle").cloned().flatten())
-                .map(|s| LocalizableString::en(s)),
+                .map(LocalizableString::en),
         };
         fields.push(y_field);
     } else {
@@ -182,7 +183,7 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
                     .get(&format!("y{i}Title"))
                     .cloned()
                     .unwrap_or_default()
-                    .map(|s| LocalizableString::en(s)),
+                    .map(LocalizableString::en),
             };
             fields.push(y_field);
         }
@@ -190,20 +191,20 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
     let x_values: Vec<_> = tag
         .get("x")
         .cloned()
-        .unwrap_or_default()
-        .expect("'x' attribute not present")
-        .split(",")
-        .map(|s| s.trim())
+        .flatten()
+        .ok_or_else(|| anyhow!("'x' attribute not present"))?
+        .split(',')
+        .map(str::trim)
         .map(|s| convert_graph_chart_value(s, &x_type))
         .collect();
     let y_values: Vec<Vec<_>> = if tag.contains_key("y") {
         vec![
             tag.get("y")
                 .cloned()
-                .unwrap_or_default()
-                .expect("'y' attribute not present")
-                .split(",")
-                .map(|s| s.trim())
+                .flatten()
+                .ok_or_else(|| anyhow!("'y' attribute not present"))?
+                .split(',')
+                .map(str::trim)
                 .map(|s| convert_graph_chart_value(s, &y_type))
                 .collect(),
         ]
@@ -219,10 +220,10 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
                 .get(&key)
                 .cloned()
                 .unwrap_or_default()
-                .expect(&format!("'{}' attribute not present", key));
+                .ok_or_else(|| anyhow!("'{}' attribute not present", key))?;
             let values_for_y: Vec<_> = y_values
-                .split(",")
-                .map(|s| s.trim())
+                .split(',')
+                .map(str::trim)
                 .map(|s| convert_graph_chart_value(s, &y_type))
                 .collect();
             values.push(values_for_y);
@@ -230,13 +231,13 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
         }
         values
     };
-    let tab = Tab {
+    let table = Tab {
         license: LICENSE.to_string(),
         description: tag
             .get("description")
             .cloned()
             .unwrap_or_default()
-            .map(|s| LocalizableString::en(s)),
+            .map(LocalizableString::en),
         schema: fields.into(),
         data: x_values
             .into_iter()
@@ -254,35 +255,34 @@ pub fn handle_graph_chart(name: String, tag: HashMap<String, Option<String>>) ->
             })
             .collect(),
     };
-    let tab_file_name = format!("{}{TAB_EXT}", name);
-    let x_axis = match tag.get("xAxisTitle") {
-        Some(Some(title)) => Some(Axis {
-            title: Some(LocalizableString::en(title.clone())),
-            ..Axis::default()
-        }),
-        _ => None,
-    };
-    let y_axis = match tag.get("yAxisTitle") {
-        Some(Some(title)) => Some(Axis {
-            title: Some(LocalizableString::en(title.clone())),
-            ..Axis::default()
-        }),
-        _ => None,
-    };
+    let tab_file_name = format!("{name}{TAB_EXT}");
+
+    macro_rules! gen_axis {
+        ($tag:expr, $name:expr) => {
+            match $tag.get($name) {
+                Some(Some(value)) => Some(Axis {
+                    title: Some(LocalizableString::en(value.clone())),
+                    ..Axis::default()
+                }),
+                _ => None,
+            }
+        };
+    }
+
     let chart = Chart {
         license: LICENSE.to_string(),
-        version: 1,
-        r#type: convert_graph_chart_type(&chart_type).to_string(),
-        x_axis,
-        y_axis,
+        r#type: convert_graph_chart_type(&chart_type),
+        x_axis: gen_axis!(tag, "xAxisTitle"),
+        y_axis: gen_axis!(tag, "yAxisTitle"),
         source: tab_file_name,
         title: Some(
             tag.get("title")
                 .cloned()
                 .unwrap_or_default()
-                .map(|s| LocalizableString::en(s))
-                .unwrap_or(LocalizableString::en(name.clone())),
+                .map(LocalizableString::en)
+                .unwrap_or(LocalizableString::en(name.to_string())),
         ),
+        ..Default::default()
     };
-    ConversionOutput { chart, tab }
+    Ok(ConversionOutput { chart, tab: table })
 }

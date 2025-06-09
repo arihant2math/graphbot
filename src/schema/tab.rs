@@ -1,6 +1,7 @@
-use crate::schema::LocalizableString;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use crate::schema::LocalizableString;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Field {

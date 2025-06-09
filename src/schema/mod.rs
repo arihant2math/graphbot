@@ -1,8 +1,9 @@
 pub mod chart;
 pub mod tab;
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LocalizableString(pub HashMap<String, String>);

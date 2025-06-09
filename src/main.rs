@@ -1,34 +1,25 @@
 mod config;
-mod convert_graph;
-mod convert_pie_chart;
 mod parser;
 pub mod schema;
+mod convert;
 
-use crate::config::Config;
-use crate::parser::call_parser;
-use anyhow::{Context, bail};
-use log::{LevelFilter, debug, error, info, warn};
-use mwbot::generators::{CategoryMemberSort, CategoryMembers, Generator};
-use mwbot::{Bot, Page, SaveOptions};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::time::Duration;
+use std::{time::Duration};
+
+use anyhow::{bail, Context};
+use log::{debug, error, info, warn, LevelFilter};
+use mwbot::{
+    generators::{CategoryMemberSort, CategoryMembers, Generator}, Bot, Page,
+    SaveOptions,
+};
 use tokio::time::sleep;
+use crate::{
+    config::Config,
+    parser::{call_parser, Template},
+};
+use crate::convert::gen_graph_chart;
 
 pub const TAB_EXT: &str = ".tab";
 pub const CHART_EXT: &str = ".chart";
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-struct Template {
-    pub name: String,
-    pub params: HashMap<String, Option<String>>,
-    pub wikitext: String,
-}
-
-#[derive(Serialize, Deserialize)]
-struct OutRoot {
-    pub data: Vec<Template>,
-}
 
 async fn create_pages(bot: &Bot, template: &Template, name: &str) -> anyhow::Result<String> {
     let file_name = name.replace(' ', "_");
@@ -37,7 +28,7 @@ async fn create_pages(bot: &Bot, template: &Template, name: &str) -> anyhow::Res
     let mut modded_template = template.clone();
     // width is handled separately
     modded_template.params.remove("width");
-    let out = convert_graph::handle(name, &modded_template.params)?;
+    let out = gen_graph_chart(name, &modded_template.params)?;
 
     // Save the tab and chart files
     let tab_text = serde_json::to_string_pretty(&out.tab)?;
@@ -121,14 +112,20 @@ async fn handle_template(bot: &Bot, parsed: Template, title: &str) -> anyhow::Re
                 })?.to_ascii_lowercase() {
                     "population (million)" => {
                         name = Some(format!("{country} Total Population"));
+                        if !parsed.params.contains_key("title") {
+                            parsed.params.insert("title".to_string(), Some(format!("{country} Population")));
+                        }
                     }
                     "natural change (per 1000)" => {
                         name = Some(format!("{country} Population Change"));
                     }
-                    "infant mortality (per 1000 live births)" => {
+                    "natural growth" => {
+                        name = Some(format!("{country} Natural Growth"));
+                    }
+                    "infant mortality (per 1000 live births)" | "infant mortality (per 1000 births)" => {
                         name = Some(format!("{country} Infant Mortality"));
                     }
-                    "total fertility rate" => {
+                    "total fertility rate" | "tfr" => {
                         name = Some(format!("{country} TFR"));
                         if !parsed.params.contains_key("title") {
                             parsed.params.insert("title".to_string(), Some("Total Fertility Rate".to_string()));
@@ -190,11 +187,11 @@ async fn run_on_page(
     };
     let (content, _) = tokio::join!(content_future, rm_future);
     let content = content.context("Failed to get wikitext")?;
-    let input = call_parser(&content, config)?;
-    let templates: OutRoot = serde_json::from_str(&input).context("Failed to parse JSON")?;
+    let p = call_parser(&content, config)?;
+
     let mut swaps = vec![];
     let mut errors = vec![];
-    for parsed in templates.data {
+    for parsed in p.templates {
         match handle_template(commons_bot, parsed, page.title()).await {
             Ok(s) => {
                 if let Some(swap) = s {

@@ -8,4 +8,9 @@ Quickly convert old graphs from the graph extension to the chart extension.
 - uv
 
 ## Usage
+First start the parsing server:
+
+`uv run server.py`
+
+Then run the bot:
 `cargo run -- [Article]`

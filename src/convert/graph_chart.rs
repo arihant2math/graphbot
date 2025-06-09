@@ -1,11 +1,18 @@
-use crate::TAB_EXT;
-use crate::schema::LocalizableString;
-use crate::schema::chart::{Axis, Chart, ChartType};
-use crate::schema::tab::{Field, Tab};
+use std::collections::HashMap;
+
 use anyhow::anyhow;
 use log::warn;
 use serde_json::{Number, Value};
-use std::collections::HashMap;
+
+use crate::{
+    TAB_EXT,
+    schema::{
+        LocalizableString,
+        chart::{Axis, Chart, ChartType},
+        tab::{Field, Tab},
+    },
+};
+use crate::convert::ConversionOutput;
 
 const LICENSE: &str = "CC0-1.0";
 
@@ -32,7 +39,8 @@ fn convert_graph_types(s: &str) -> &str {
 
 fn parse_number(value: &str) -> Option<Number> {
     // Replace the unicode minus sign with a regular hyphen
-    // This was 20 minutes of debugging, because the minus sign was not being parsed correctly
+    // This was 20 minutes of debugging, because the minus sign was not being parsed
+    // correctly
     let value = value.replace("\u{2212}", "-");
     if let Ok(i) = value.parse::<i128>() {
         return Number::from_i128(i);
@@ -44,8 +52,9 @@ fn parse_number(value: &str) -> Option<Number> {
 
 #[cfg(test)]
 mod number_parse_tests {
-    use super::parse_number;
     use serde_json::Number;
+
+    use super::parse_number;
 
     #[test]
     fn test_parse_number() {
@@ -79,32 +88,20 @@ fn convert_graph_chart_value(value: &str, ty: &str) -> Value {
     }
 }
 
-macro_rules! warn_unsupported_attr {
-    ($tag:expr, $attr:expr) => {
-        if $tag.contains_key($attr) {
-            warn!(
-                "'{}' attribute is not supported by the chart extension.",
-                $attr
-            );
-        }
-    };
-}
-
-pub struct ConversionOutput {
-    pub chart: Chart,
-    pub tab: Tab,
-}
-
-pub fn handle(
+pub fn generate(
     name: &str,
     tag: &HashMap<String, Option<String>>,
 ) -> anyhow::Result<ConversionOutput> {
-    warn_unsupported_attr!(tag, "colors");
-    warn_unsupported_attr!(tag, "width");
-    warn_unsupported_attr!(tag, "height");
-    warn_unsupported_attr!(tag, "xScaleType");
-    warn_unsupported_attr!(tag, "yScaleType");
-    warn_unsupported_attr!(tag, "xAxisAngle");
+    let supported_attrs = [
+        "type", "xType", "yType", "xAxisTitle", "yAxisTitle", "title", "description",
+        "x", "y", "y1", "y2", "y3", "y4", "y5", "y6", "y7", "y8", "y9",
+        "xTitle", "y1Title", "y2Title", "y3Title", "y4Title", "y5Title", "y6Title", "y7Title", "y8Title", "y9Title",
+    ];
+    for attr in tag.keys() {
+        if !supported_attrs.contains(&attr.as_str()) {
+            warn!("Unsupported attribute '{}' in graph chart tag.", attr);
+        }
+    }
 
     let chart_type = tag
         .get("type")
@@ -117,21 +114,125 @@ pub fn handle(
         unimplemented!()
     }
 
+    let tab_file_name = format!("{name}{TAB_EXT}");
+
+    macro_rules! gen_axis {
+        ($tag:expr, $name:expr) => {
+            match $tag.get($name) {
+                Some(Some(value)) => Some(Axis {
+                    title: Some(LocalizableString::en(value.clone())),
+                    ..Axis::default()
+                }),
+                _ => None,
+            }
+        };
+    }
+
+    let chart = Chart {
+        license: LICENSE.to_string(),
+        r#type: convert_graph_chart_type(&chart_type),
+        x_axis: gen_axis!(tag, "xAxisTitle"),
+        y_axis: gen_axis!(tag, "yAxisTitle"),
+        source: tab_file_name,
+        title: Some(
+            tag.get("title")
+                .cloned()
+                .unwrap_or_default()
+                .map(LocalizableString::en)
+                .unwrap_or(LocalizableString::en(name.to_string())),
+        ),
+        ..Default::default()
+    };
+    Ok(ConversionOutput { chart, tab: gen_tab(tag)? })
+}
+
+fn gen_tab(tag: &HashMap<String, Option<String>>) -> anyhow::Result<Tab> {
     let x_type = convert_graph_types(
         &tag.get("xType")
             .cloned()
             .unwrap_or_default()
             .unwrap_or("number".to_string()),
     )
-    .to_string();
+        .to_string();
     let y_type = convert_graph_types(
         &tag.get("yType")
             .cloned()
             .unwrap_or_default()
             .unwrap_or("number".to_string()),
     )
-    .to_string();
+        .to_string();
 
+    let x_values: Vec<_> = tag
+        .get("x")
+        .cloned()
+        .flatten()
+        .ok_or_else(|| anyhow!("'x' attribute not present"))?
+        .split(',')
+        .map(str::trim)
+        .map(|s| convert_graph_chart_value(s, &x_type))
+        .collect();
+    let y_values: Vec<Vec<_>> = if tag.contains_key("y") {
+        vec![
+            tag.get("y")
+                .cloned()
+                .flatten()
+                .ok_or_else(|| anyhow!("'y' attribute not present"))?
+                .split(',')
+                .map(str::trim)
+                .map(|s| convert_graph_chart_value(s, &y_type))
+                .collect(),
+        ]
+    } else {
+        let mut values = Vec::new();
+        let mut counter: u32 = 1;
+        loop {
+            let key = format!("y{counter}");
+            if !tag.contains_key(&key) {
+                break;
+            }
+            let y_values = tag
+                .get(&key)
+                .cloned()
+                .unwrap_or_default()
+                .ok_or_else(|| anyhow!("'{}' attribute not present", key))?;
+            let values_for_y: Vec<_> = y_values
+                .split(',')
+                .map(str::trim)
+                .map(|s| convert_graph_chart_value(s, &y_type))
+                .collect();
+            values.push(values_for_y);
+            counter += 1;
+        }
+        values
+    };
+    let table = Tab {
+        license: LICENSE.to_string(),
+        description: tag
+            .get("description")
+            .cloned()
+            .unwrap_or_default()
+            .map(LocalizableString::en),
+        schema: gen_fields(tag, &x_type, &y_type).into(),
+        data: x_values
+            .into_iter()
+            .enumerate()
+            .map(|(count, v)| {
+                let mut out = vec![v];
+                for y_value in &y_values {
+                    if count < y_value.len() {
+                        out.push(y_value[count].clone());
+                    } else {
+                        out.push(Value::Null);
+                    }
+                }
+                out
+            })
+            .collect(),
+    };
+    Ok(table)
+}
+
+fn gen_fields(tag: &HashMap<String, Option<String>>, x_type: &String, y_type: &String) -> Vec<Field> {
     let mut fields = vec![Field {
         name: "x".to_string(),
         r#type: x_type.clone(),
@@ -188,101 +289,5 @@ pub fn handle(
             fields.push(y_field);
         }
     }
-    let x_values: Vec<_> = tag
-        .get("x")
-        .cloned()
-        .flatten()
-        .ok_or_else(|| anyhow!("'x' attribute not present"))?
-        .split(',')
-        .map(str::trim)
-        .map(|s| convert_graph_chart_value(s, &x_type))
-        .collect();
-    let y_values: Vec<Vec<_>> = if tag.contains_key("y") {
-        vec![
-            tag.get("y")
-                .cloned()
-                .flatten()
-                .ok_or_else(|| anyhow!("'y' attribute not present"))?
-                .split(',')
-                .map(str::trim)
-                .map(|s| convert_graph_chart_value(s, &y_type))
-                .collect(),
-        ]
-    } else {
-        let mut values = Vec::new();
-        let mut counter: u32 = 1;
-        loop {
-            let key = format!("y{counter}");
-            if !tag.contains_key(&key) {
-                break;
-            }
-            let y_values = tag
-                .get(&key)
-                .cloned()
-                .unwrap_or_default()
-                .ok_or_else(|| anyhow!("'{}' attribute not present", key))?;
-            let values_for_y: Vec<_> = y_values
-                .split(',')
-                .map(str::trim)
-                .map(|s| convert_graph_chart_value(s, &y_type))
-                .collect();
-            values.push(values_for_y);
-            counter += 1;
-        }
-        values
-    };
-    let table = Tab {
-        license: LICENSE.to_string(),
-        description: tag
-            .get("description")
-            .cloned()
-            .unwrap_or_default()
-            .map(LocalizableString::en),
-        schema: fields.into(),
-        data: x_values
-            .into_iter()
-            .enumerate()
-            .map(|(count, v)| {
-                let mut out = vec![v];
-                for y_value in &y_values {
-                    if count < y_value.len() {
-                        out.push(y_value[count].clone());
-                    } else {
-                        out.push(Value::Null);
-                    }
-                }
-                out
-            })
-            .collect(),
-    };
-    let tab_file_name = format!("{name}{TAB_EXT}");
-
-    macro_rules! gen_axis {
-        ($tag:expr, $name:expr) => {
-            match $tag.get($name) {
-                Some(Some(value)) => Some(Axis {
-                    title: Some(LocalizableString::en(value.clone())),
-                    ..Axis::default()
-                }),
-                _ => None,
-            }
-        };
-    }
-
-    let chart = Chart {
-        license: LICENSE.to_string(),
-        r#type: convert_graph_chart_type(&chart_type),
-        x_axis: gen_axis!(tag, "xAxisTitle"),
-        y_axis: gen_axis!(tag, "yAxisTitle"),
-        source: tab_file_name,
-        title: Some(
-            tag.get("title")
-                .cloned()
-                .unwrap_or_default()
-                .map(LocalizableString::en)
-                .unwrap_or(LocalizableString::en(name.to_string())),
-        ),
-        ..Default::default()
-    };
-    Ok(ConversionOutput { chart, tab: table })
+    fields
 }

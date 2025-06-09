@@ -1,5 +1,6 @@
-use crate::schema::LocalizableString;
 use serde::{Deserialize, Serialize};
+
+use crate::schema::LocalizableString;
 
 fn default_axis_format() -> String {
     "None".to_string()
@@ -32,9 +33,10 @@ impl Default for Axis {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ChartType {
+    #[default]
     Line,
     Pie,
     Bar,

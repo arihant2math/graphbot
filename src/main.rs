@@ -1,158 +1,81 @@
 mod config;
+mod convert;
+mod page_handler;
 mod parser;
 pub mod schema;
-mod convert;
+mod rev_info;
 
-use std::{time::Duration};
-
-use anyhow::{bail, Context};
-use log::{debug, error, info, warn, LevelFilter};
+use std::{sync::Arc, time::Duration};
+use anyhow::Context;
+use bincode::{Decode, Encode};
+use dashmap::DashMap;
 use mwbot::{
-    generators::{CategoryMemberSort, CategoryMembers, Generator}, Bot, Page,
-    SaveOptions,
+    generators::{CategoryMemberSort, CategoryMembers, Generator}, Bot,
+    Page,
 };
-use tokio::time::sleep;
-use crate::{
-    config::Config,
-    parser::{call_parser, Template},
+use serde::{Deserialize, Serialize};
+use tokio::{
+    sync::{mpsc, mpsc::Receiver, oneshot, oneshot::Sender, Mutex},
+    task,
+    task::JoinHandle,
+    time::sleep,
 };
-use crate::convert::gen_graph_chart;
+use tracing::{error, info, warn};
+use tracing_appender::{non_blocking, rolling};
+use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter, Layer};
+use rev_info::RevInfo;
+use crate::config::Config;
+use std::io::Write;
+
+#[derive(Default, Serialize, Deserialize, Encode, Decode)]
+#[repr(transparent)]
+pub struct FailedRevs(#[bincode(with_serde)] DashMap<RevInfo, String>);
+
+impl FailedRevs {
+    pub fn from_file() -> anyhow::Result<Self> {
+        let file = std::fs::File::open("failed_revisions.bin")
+            .context("Failed to open failed revisions file")?;
+        let reader = std::io::BufReader::new(file);
+        let deserialized: Self = bincode::decode_from_reader(reader, bincode::config::standard())
+            .context("Failed to deserialize failed revisions")?;
+        Ok(deserialized)
+    }
+
+    pub fn load() -> Self {
+        Self::from_file().unwrap_or_else(|e| {
+            error!("Failed to load failed revisions: {e}");
+            Self::default()
+        })
+    }
+
+    pub fn save(&self) -> anyhow::Result<()> {
+        let file = std::fs::File::create("failed_revisions.bin")
+            .context("Failed to create failed revisions file")?;
+        let mut writer = std::io::BufWriter::new(file);
+        bincode::encode_into_std_write(&self, &mut writer, bincode::config::standard())
+            .context("Failed to serialize failed revisions")?;
+        writer.flush().context("Failed to flush failed revisions file")?;
+        Ok(())
+    }
+
+    pub fn insert(&self, rev_info: RevInfo, error: anyhow::Error) {
+        self.0.insert(rev_info, error.to_string());
+    }
+
+    pub fn contains_key(&self, rev_info: &RevInfo) -> bool {
+        self.0.contains_key(rev_info)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 
 pub const TAB_EXT: &str = ".tab";
 pub const CHART_EXT: &str = ".chart";
 
-async fn create_pages(bot: &Bot, template: &Template, name: &str) -> anyhow::Result<String> {
-    let file_name = name.replace(' ', "_");
-    let tab_file_name = format!("Data:{file_name}{TAB_EXT}");
-    let chart_file_name = format!("Data:{file_name}{CHART_EXT}");
-    let mut modded_template = template.clone();
-    // width is handled separately
-    modded_template.params.remove("width");
-    let out = gen_graph_chart(name, &modded_template.params)?;
-
-    // Save the tab and chart files
-    let tab_text = serde_json::to_string_pretty(&out.tab)?;
-    let tab_file_page = bot.page(&tab_file_name)?;
-    if !tab_file_page.exists().await? {
-        match tab_file_page
-            .save(
-                tab_text,
-                &SaveOptions::summary("GraphPort: Create tab file").mark_as_bot(true),
-            )
-            .await
-        {
-            Ok(_) => info!("Tab file {tab_file_name} created successfully."),
-            Err(e) => {
-                error!("Failed to create tab file {tab_file_name}: {e}");
-                warn!("Please create the tab file manually.");
-                warn!(
-                    "Tab file content ({tab_file_name}):\n{}",
-                    serde_json::to_string_pretty(&out.tab)?
-                );
-                return Err(e.into());
-            }
-        }
-    } else {
-        warn!("Tab file {tab_file_name} already exists, skipping creation.");
-    }
-    let chart_text = serde_json::to_string_pretty(&out.chart)?;
-    let chart_file_page = bot.page(&chart_file_name)?;
-    if !chart_file_page.exists().await? {
-        match chart_file_page
-            .save(
-                chart_text,
-                &SaveOptions::summary("GraphPort: Create chart file").mark_as_bot(true),
-            )
-            .await
-        {
-            Ok(_) => info!("Chart file {chart_file_name} created successfully."),
-            Err(e) => {
-                error!("Failed to create chart file {chart_file_name}: {e}");
-                warn!("Please create the chart file manually.");
-                warn!(
-                    "Chart file content ({chart_file_name}):\n{}",
-                    serde_json::to_string_pretty(&out.chart)?
-                );
-                return Err(e.into());
-            }
-        }
-    } else {
-        warn!("Chart file {chart_file_name} already exists, skipping creation.");
-    }
-    info!("Successfully created tab and chart files for {name}.");
-    let inside = if let Some(width) = template.params.get("width").cloned().flatten() {
-        format!("ChartDisplay|definition={name}{CHART_EXT}|data={name}{TAB_EXT}|Width={width}")
-    } else {
-        format!("ChartDisplay|definition={name}{CHART_EXT}|data={name}{TAB_EXT}")
-    };
-    Ok(format!("{}{inside}{}", "{{", "}}"))
-}
-
-struct Swap {
-    from: String,
-    to: String,
-}
-
-async fn handle_template(bot: &Bot, parsed: Template, title: &str) -> anyhow::Result<Option<Swap>> {
-    let mut parsed = parsed;
-    match &*parsed.name {
-        "PortGraph" => {
-            let mut name = parsed.params.get("name").cloned().flatten();
-
-            // Special handling for demographics related pages
-            if name.is_none() && title.starts_with("Demographics of ") {
-                // now we need to extract the name from the title
-                let country = title.trim_start_matches("Demographics of").trim();
-                let country = country.trim_start_matches("the").trim();
-                if country.is_empty() {
-                    bail!("Country name empty, unreachable");
-                }
-                match &*parsed.params.get("y1Title").cloned().flatten().ok_or_else(|| {
-                    anyhow::anyhow!("'y1Title' parameter is required for PortGraph on demographics pages without template graph name")
-                })?.to_ascii_lowercase() {
-                    "population (million)" => {
-                        name = Some(format!("{country} Total Population"));
-                        if !parsed.params.contains_key("title") {
-                            parsed.params.insert("title".to_string(), Some(format!("{country} Population")));
-                        }
-                    }
-                    "natural change (per 1000)" => {
-                        name = Some(format!("{country} Population Change"));
-                    }
-                    "natural growth" => {
-                        name = Some(format!("{country} Natural Growth"));
-                    }
-                    "infant mortality (per 1000 live births)" | "infant mortality (per 1000 births)" => {
-                        name = Some(format!("{country} Infant Mortality"));
-                    }
-                    "total fertility rate" | "tfr" => {
-                        name = Some(format!("{country} TFR"));
-                        if !parsed.params.contains_key("title") {
-                            parsed.params.insert("title".to_string(), Some("Total Fertility Rate".to_string()));
-                        }
-                    }
-                    _ => {
-                        bail!("Unsupported y1Title for demographics page: {}", parsed.params.get("y1Title").cloned().flatten().unwrap_or_default());
-                    }
-                }
-            }
-
-            let name = name.ok_or_else(|| {
-                anyhow::anyhow!("'name' parameter is required for ConvertGraphChart")
-            })?;
-            let swap = create_pages(bot, &parsed, &name)
-                .await
-                .context("Failed to generate/create pages")?;
-            Ok(Some(Swap {
-                from: parsed.wikitext,
-                to: swap,
-            }))
-        }
-        _ => Ok(None),
-    }
-}
-
-async fn check_shutdown(bot: &Bot, wiki: &str, config: &Config) -> anyhow::Result<()> {
+async fn check_shutdown(bot: &Bot, wiki: &str, config: &Config) -> anyhow::Result<bool> {
     if bot
         .page(&format!("User:{}/Shutdown", config.username))?
         .exists()
@@ -162,105 +85,42 @@ async fn check_shutdown(bot: &Bot, wiki: &str, config: &Config) -> anyhow::Resul
             "This bot has been shut down on {}. Please do not use it.",
             wiki
         );
-        std::process::exit(1);
+        return Ok(true);
     }
-    Ok(())
+    Ok(false)
 }
 
-async fn run_on_page(
-    page: Page,
-    commons_bot: &Bot,
-    _wiki_bot: &Bot,
-    config: &Config,
-) -> anyhow::Result<()> {
-    info!("Processing page: {}", page.title());
-    // Download the article
-    let content_future = page.wikitext();
-    // Delete in.txt and out.json if they exist
-    let rm_future = async {
-        if tokio::fs::remove_file("in.txt").await.is_err() {
-            // File didn't exist, ignore
-        }
-        if tokio::fs::remove_file("out.json").await.is_err() {
-            // File didn't exist, ignore
-        }
-    };
-    let (content, _) = tokio::join!(content_future, rm_future);
-    let content = content.context("Failed to get wikitext")?;
-    let p = call_parser(&content, config)?;
+fn init_logging(_config: &Config) -> non_blocking::WorkerGuard {
+    let file_appender = rolling::hourly("logs/", "graphport.log");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
-    let mut swaps = vec![];
-    let mut errors = vec![];
-    for parsed in p.templates {
-        match handle_template(commons_bot, parsed, page.title()).await {
-            Ok(s) => {
-                if let Some(swap) = s {
-                    swaps.push(swap);
-                }
-            }
-            Err(error) => {
-                error!("Error handling template: {error}");
-                errors.push(error);
-            }
-        }
-    }
-    let mut modified_wikitext = content.clone();
-    for swap in swaps {
-        if modified_wikitext.contains(&swap.from) {
-            modified_wikitext = modified_wikitext.replace(&swap.from, &swap.to);
-        } else {
-            warn!("Template {} not found in page {}", swap.from, page.title());
-        }
-    }
-    // Save the modified wikitext back to the page
-    let title = page.title().to_string();
-    if modified_wikitext != content {
-        let save_options = SaveOptions::summary("Port graphs to charts").mark_as_bot(true);
-        match page.save(modified_wikitext, &save_options).await {
-            Ok(_) => info!("Successfully updated page {title}"),
-            Err(e) => {
-                error!("Failed to update page {title}: {e}");
-                bail!("Failed to update page {title}");
-            }
-        }
-    } else {
-        info!("No changes made to page {title}");
-    }
-    if !errors.is_empty() {
-        return Err(anyhow::anyhow!(
-            "Errors occurred while processing page {title}: {errors:?}"
-        ));
-    }
-    Ok(())
+    let stdout_layer = fmt::Layer::new()
+        .with_ansi(true)
+        .with_writer(std::io::stdout)
+        .with_filter(EnvFilter::new("info"));
+
+    let file_layer = fmt::Layer::new()
+        .with_ansi(false)
+        .with_writer(non_blocking)
+        .with_filter(
+            EnvFilter::new("trace")
+                .add_directive("hyper=info".parse().unwrap())
+                .add_directive("h2=info".parse().unwrap())
+                .add_directive("mwbot=debug".parse().unwrap())
+                .add_directive("parsoid=debug".parse().unwrap()),
+        );
+
+    let subscriber = tracing_subscriber::registry()
+        .with(stdout_layer)
+        .with(file_layer);
+    tracing::subscriber::set_global_default(subscriber).expect("Unable to set a global subscriber");
+    guard
 }
 
-fn init_logging(_config: &Config) {
-    let stdout = log4rs::append::console::ConsoleAppender::builder()
-        .encoder(Box::new(log4rs::encode::pattern::PatternEncoder::new(
-            // Colorize the output
-            "[{h({l})} {M} {d(%Y-%m-%d %H:%M:%S)}] {m}{n}",
-        )))
-        .build();
-    // File with the rest
-    let file = log4rs::append::file::FileAppender::builder()
-        .encoder(Box::new(log4rs::encode::pattern::PatternEncoder::new(
-            "[{l} {M} {d(%Y-%m-%d %H:%M:%S)}] {m}{n}",
-        )))
-        .build("graphport.log")
-        .expect("Failed to create file appender");
-    let config = log4rs::Config::builder()
-        .appender(log4rs::config::Appender::builder().build("stdout", Box::new(stdout)))
-        .appender(log4rs::config::Appender::builder().build("file", Box::new(file)))
-        .logger(log4rs::config::Logger::builder().build("graphport", LevelFilter::Info))
-        .build(
-            log4rs::config::Root::builder()
-                .appender("stdout")
-                .appender("file")
-                .build(LevelFilter::Info),
-        )
-        .expect("Failed to create log4rs config");
-    log4rs::init_config(config).expect("Failed to initialize logging");
-}
+const COMMONS_API_URL: &str = "https://commons.wikimedia.org/w/api.php";
+const COMMONS_REST_URL: &str = "https://commons.wikimedia.org/api/rest_v1";
+
+const USER_AGENT: &str = "GraphPort/1";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -269,48 +129,139 @@ async fn main() -> anyhow::Result<()> {
     let api_url = url.join("w/api.php")?;
     let rest_url = url.join("api/rest_v1")?;
     // Read the config file
-    init_logging(&config);
+    let _guard = init_logging(&config);
+    // check for parser load
+    if let Err(e) = parser::call_parser("", &config) {
+        error!("Parser failed to parse empty string, are you sure it is running? {e}");
+        return Err(e.into());
+    }
     let token = config.access_token.clone();
+    let init_bots_span = tracing::debug_span!("init_bots").entered();
     let wiki_bot = Bot::builder(api_url.to_string(), rest_url.to_string())
-        .set_user_agent("GraphPort/1".to_string())
+        .set_user_agent(USER_AGENT.to_string())
         .set_mark_as_bot(true)
         .set_oauth2_token(config.username.clone(), token.clone())
         .build()
         .await?;
-    let commons_bot = Bot::builder(
-        "https://commons.wikimedia.org/w/api.php".to_string(),
-        "https://commons.wikimedia.org/api/rest_v1".to_string(),
-    )
-    .set_user_agent("GraphPort/1".to_string())
-    .set_mark_as_bot(true)
-    .set_oauth2_token(config.username.clone(), token)
-    .build()
-    .await?;
 
-    // TODO: impl
-    // let mut failed_revs = HashMap::new();
+    let commons_bot = Bot::builder(COMMONS_API_URL.to_string(), COMMONS_REST_URL.to_string())
+        .set_user_agent(USER_AGENT.to_string())
+        .set_mark_as_bot(true)
+        .set_oauth2_token(config.username.clone(), token)
+        .build()
+        .await?;
+    init_bots_span.exit();
+
+    let wiki_bot = Arc::new(wiki_bot);
+    let commons_bot = Arc::new(commons_bot);
+    let config = Arc::new(config);
+
+    let failed_revs = Arc::new(FailedRevs::load());
+
+    info!("Starting GraphPort bot");
+
+    // Create workers
+    let (page_sender, page_reciever) = mpsc::channel(100);
+    let rx = Arc::new(Mutex::new(page_reciever));
+    let workers = spawn_workers(&wiki_bot, &commons_bot, &config, &rx);
 
     loop {
-        check_shutdown(&commons_bot, "https://commons.wikimedia.org/", &config).await?;
-        check_shutdown(&wiki_bot, &config.wiki, &config).await?;
         // Get the list of articles to process
         let generator =
             CategoryMembers::new(&config.search_category).sort(CategoryMemberSort::Timestamp);
         let mut output = generator.generate(&wiki_bot);
-        if let Some(Ok(o)) = output.recv().await {
-            let title = o.title().to_string();
-            match run_on_page(o, &commons_bot, &wiki_bot, &config).await {
-                Ok(_) => {
-                    debug!("Successfully processed page: {title}");
-                }
-                Err(error) => {
-                    error!("Error processing page {title}: {error}");
+        while let Some(Ok(o)) = output.recv().await {
+            let revid = get_revid(&o, &wiki_bot).await;
+            let page_title = o.title().to_string();
+            let rev_info = revid.map(|id| RevInfo::new(id, page_title));
+            if let Some(ref rev_info) = rev_info {
+                if failed_revs.contains_key(rev_info) {
+                    warn!(
+                        "Skipping page {} with revision ID {} due to previous failure",
+                        rev_info.page_title, rev_info.id
+                    );
+                    continue;
                 }
             }
-        } else {
-            info!("No articles found in {}", config.search_category);
-            sleep(Duration::from_secs(9)).await;
+            if check_shutdown(&commons_bot, "https://commons.wikimedia.org/", &config).await? {
+                info!("Shutdown detected, exiting.");
+                break;
+            }
+            if check_shutdown(&wiki_bot, &config.wiki, &config).await? {
+                info!("Shutdown detected, exiting.");
+                break;
+            }
+
+            let (send, rec) = oneshot::channel();
+            if let Err(e) = page_sender.send((o, send)).await {
+                error!("Failed to send page to handler: {e}");
+                continue;
+            }
+            task::spawn({
+                let failed_revs = Arc::clone(&failed_revs);
+                async move {
+                    match rec.await {
+                        Ok(result) => {
+                            if let Err(e) = result {
+                                error!("Error processing page: {e}");
+                                if let Some(rev_info) = rev_info {
+                                    failed_revs.insert(rev_info, e);
+                                }
+                            }
+                        }
+                        Err(e) => error!("Failed to receive result: {e}"),
+                    }
+                }
+            });
         }
-        sleep(Duration::from_secs(1)).await;
+        if check_shutdown(&commons_bot, "https://commons.wikimedia.org/", &config).await? {
+            info!("Shutdown detected, exiting.");
+            break;
+        }
+        if check_shutdown(&wiki_bot, &config.wiki, &config).await? {
+            info!("Shutdown detected, exiting.");
+            break;
+        }
+        info!("No more articles found in {}", config.search_category);
+        // Write failed revisions to file
+        if !failed_revs.is_empty() {
+            if let Err(e) = failed_revs.save() {
+                error!("Failed to save failed revisions: {e}");
+            } else {
+                info!("Failed revisions saved");
+            }
+        } else {
+            info!("No failed revisions to write.");
+        }
+        sleep(Duration::from_secs(10)).await;
     }
+    drop(workers); // Ensure all worker handles are dropped right before exiting
+    Ok(())
+}
+
+fn spawn_workers(
+    wiki_bot: &Arc<Bot>,
+    commons_bot: &Arc<Bot>,
+    config: &Arc<Config>,
+    rx: &Arc<Mutex<Receiver<(Page, Sender<anyhow::Result<()>>)>>>,
+) -> Vec<JoinHandle<()>> {
+    const NUM_WORKERS: usize = 4;
+
+    let mut workers = Vec::with_capacity(NUM_WORKERS);
+    for _ in 0..NUM_WORKERS {
+        let wiki_bot = Arc::clone(&wiki_bot);
+        let commons_bot = Arc::clone(&commons_bot);
+        let config = Arc::clone(&config);
+        let rx = Arc::clone(&rx);
+        let worker = tokio::spawn(async move {
+            page_handler::page_handler(rx, commons_bot, wiki_bot, config).await;
+        });
+        workers.push(worker);
+    }
+    workers
+}
+
+async fn get_revid(page: &Page, bot: &Bot) -> Option<u64> {
+    let resp = bot.parsoid().get(page.title()).await.ok()?;
+    resp.revision_id()
 }

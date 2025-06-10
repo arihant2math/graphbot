@@ -1,5 +1,4 @@
-use crate::schema::chart::Chart;
-use crate::schema::tab::Tab;
+use crate::schema::{chart::Chart, tab::Tab};
 
 mod graph_chart;
 mod graph_tag;

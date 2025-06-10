@@ -1,20 +1,20 @@
 use std::collections::HashMap;
 
 use anyhow::anyhow;
-use log::warn;
 use serde_json::{Number, Value};
+use tracing::warn;
 
 use crate::{
     TAB_EXT,
+    convert::ConversionOutput,
     schema::{
         LocalizableString,
         chart::{Axis, Chart, ChartType},
         tab::{Field, Tab},
     },
 };
-use crate::convert::ConversionOutput;
 
-const LICENSE: &str = "CC0-1.0";
+const LICENSE: &str = "CC-BY-SA-4.0";
 
 fn convert_graph_chart_type(s: &str) -> ChartType {
     match &*s.to_ascii_lowercase() {
@@ -93,9 +93,34 @@ pub fn generate(
     tag: &HashMap<String, Option<String>>,
 ) -> anyhow::Result<ConversionOutput> {
     let supported_attrs = [
-        "type", "xType", "yType", "xAxisTitle", "yAxisTitle", "title", "description",
-        "x", "y", "y1", "y2", "y3", "y4", "y5", "y6", "y7", "y8", "y9",
-        "xTitle", "y1Title", "y2Title", "y3Title", "y4Title", "y5Title", "y6Title", "y7Title", "y8Title", "y9Title",
+        "type",
+        "xType",
+        "yType",
+        "xAxisTitle",
+        "yAxisTitle",
+        "title",
+        "description",
+        "x",
+        "y",
+        "y1",
+        "y2",
+        "y3",
+        "y4",
+        "y5",
+        "y6",
+        "y7",
+        "y8",
+        "y9",
+        "xTitle",
+        "y1Title",
+        "y2Title",
+        "y3Title",
+        "y4Title",
+        "y5Title",
+        "y6Title",
+        "y7Title",
+        "y8Title",
+        "y9Title",
     ];
     for attr in tag.keys() {
         if !supported_attrs.contains(&attr.as_str()) {
@@ -143,7 +168,10 @@ pub fn generate(
         ),
         ..Default::default()
     };
-    Ok(ConversionOutput { chart, tab: gen_tab(tag)? })
+    Ok(ConversionOutput {
+        chart,
+        tab: gen_tab(tag)?,
+    })
 }
 
 fn gen_tab(tag: &HashMap<String, Option<String>>) -> anyhow::Result<Tab> {
@@ -153,14 +181,14 @@ fn gen_tab(tag: &HashMap<String, Option<String>>) -> anyhow::Result<Tab> {
             .unwrap_or_default()
             .unwrap_or("number".to_string()),
     )
-        .to_string();
+    .to_string();
     let y_type = convert_graph_types(
         &tag.get("yType")
             .cloned()
             .unwrap_or_default()
             .unwrap_or("number".to_string()),
     )
-        .to_string();
+    .to_string();
 
     let x_values: Vec<_> = tag
         .get("x")
@@ -232,7 +260,11 @@ fn gen_tab(tag: &HashMap<String, Option<String>>) -> anyhow::Result<Tab> {
     Ok(table)
 }
 
-fn gen_fields(tag: &HashMap<String, Option<String>>, x_type: &String, y_type: &String) -> Vec<Field> {
+fn gen_fields(
+    tag: &HashMap<String, Option<String>>,
+    x_type: &String,
+    y_type: &String,
+) -> Vec<Field> {
     let mut fields = vec![Field {
         name: "x".to_string(),
         r#type: x_type.clone(),

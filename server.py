@@ -20,6 +20,7 @@ class RequestHandler(SimpleXMLRPCRequestHandler):
 
 
 # Create server
+print(f"Starting XML-RPC server on port {config['rpc']['port']}...")
 with SimpleXMLRPCServer(
     ("localhost", config["rpc"]["port"]), requestHandler=RequestHandler
 ) as server:
@@ -34,7 +35,7 @@ with SimpleXMLRPCServer(
                 {
                     "name": str(template.name).strip(),
                     "params": {
-                        str(param.name).strip(): str(param.value).strip()
+                        str(param.name).strip(): str(param.value).strip().strip('"')
                         for param in template.params
                     },
                     "wikitext": str(template).strip(),

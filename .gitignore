@@ -3,4 +3,5 @@
 *.chart
 *.tab
 *.log
+logs/
 conf/secret.toml

@@ -3,5 +3,6 @@
 *.chart
 *.tab
 *.log
+db/
 logs/
 conf/secret.toml

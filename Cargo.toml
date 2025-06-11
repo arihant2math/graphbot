@@ -1,3 +1,12 @@
+[workspace]
+members = [
+    "graphport-db"
+]
+
+[workspace.dependencies]
+sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls", "macros" ] }
+
+
 [package]
 name = "graphport"
 version = "0.1.0"
@@ -5,16 +14,19 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0"
-bincode = { version = "2.0", features = ["serde"] }
-dashmap = { version = "6.1.0", features = ["serde"] }
+axum = "0.8"
 futures = "0.3"
+graphport-db = { path = "graphport-db" }
 mwbot = "0.6"
+num_cpus = "1.17.0"
+sea-orm = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1", features = ["full"] }
 toml = "0.8"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["fmt", "local-time"] }
 url = "2.5"
-xml-rpc = "0.1.0"
+xml-rpc = "0.1"

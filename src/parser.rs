@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 
 use crate::config::Config;
 
@@ -18,8 +19,9 @@ pub struct OutRoot {
     pub elapsed: f64,
 }
 
-pub fn call_parser(input: &str, config: &Config) -> anyhow::Result<OutRoot> {
+pub async fn call_parser(input: &str, config: &RwLock<Config>) -> anyhow::Result<OutRoot> {
     let mut client = xml_rpc::Client::new().unwrap();
+    let config = config.read().await;
     client
         .call(
             &xml_rpc::Url::parse(&format!(

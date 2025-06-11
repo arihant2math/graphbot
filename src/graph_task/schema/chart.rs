@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::schema::LocalizableString;
+use crate::graph_task::schema::LocalizableString;
 
 fn default_axis_format() -> String {
     "None".to_string()

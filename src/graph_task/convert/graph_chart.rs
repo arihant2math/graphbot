@@ -6,11 +6,13 @@ use tracing::warn;
 
 use crate::{
     TAB_EXT,
-    convert::ConversionOutput,
-    schema::{
-        LocalizableString,
-        chart::{Axis, Chart, ChartType},
-        tab::{Field, Tab},
+    graph_task::{
+        convert::ConversionOutput,
+        schema::{
+            LocalizableString,
+            chart::{Axis, Chart, ChartType},
+            tab::{Field, Tab},
+        },
     },
 };
 
@@ -260,14 +262,10 @@ fn gen_tab(tag: &HashMap<String, Option<String>>) -> anyhow::Result<Tab> {
     Ok(table)
 }
 
-fn gen_fields(
-    tag: &HashMap<String, Option<String>>,
-    x_type: &String,
-    y_type: &String,
-) -> Vec<Field> {
+fn gen_fields(tag: &HashMap<String, Option<String>>, x_type: &str, y_type: &str) -> Vec<Field> {
     let mut fields = vec![Field {
         name: "x".to_string(),
-        r#type: x_type.clone(),
+        r#type: x_type.to_string(),
         title: tag
             .get("xAxisTitle")
             .cloned()
@@ -277,7 +275,7 @@ fn gen_fields(
     if tag.contains_key("y") {
         let y_field = Field {
             name: "y".to_string(),
-            r#type: y_type.clone(),
+            r#type: y_type.to_string(),
             title: tag
                 .get("yAxisTitle")
                 .cloned()
@@ -288,7 +286,7 @@ fn gen_fields(
     } else if tag.contains_key("y1") && !tag.contains_key("y2") {
         let y_field = Field {
             name: "y1".to_string(),
-            r#type: y_type.clone(),
+            r#type: y_type.to_string(),
             title: tag
                 .get("y1Title")
                 .cloned()
@@ -311,7 +309,7 @@ fn gen_fields(
         for i in 1..counter {
             let y_field = Field {
                 name: format!("y{i}"),
-                r#type: y_type.clone(),
+                r#type: y_type.to_string(),
                 title: tag
                     .get(&format!("y{i}Title"))
                     .cloned()

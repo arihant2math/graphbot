@@ -1,8 +1,8 @@
 use std::hash::Hash;
-use bincode::{Decode, Encode};
+
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RevInfo {
     pub id: u64,
     pub page_title: String,

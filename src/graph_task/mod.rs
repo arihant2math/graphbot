@@ -12,7 +12,7 @@ use tokio::{
     task::JoinHandle,
     time::sleep,
 };
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 use crate::{
     CHART_EXT, TAB_EXT, api_utils,
@@ -25,22 +25,22 @@ use crate::{
 mod convert;
 pub mod schema;
 
-type PageRequest = (Page, Sender<anyhow::Result<()>>);
+type PageRequest = (Page, Option<RevInfo>, Sender<anyhow::Result<()>>);
 
 struct Swap {
     from: String,
     to: String,
 }
 
-#[tracing::instrument(level = "trace", skip(bot, template))]
-async fn create_pages(bot: &Bot, template: &Template, name: &str) -> anyhow::Result<String> {
+#[tracing::instrument(skip(bot, template))]
+async fn create_pages(bot: &Bot, template: &Template, name: &str, rev_url: &str) -> anyhow::Result<String> {
     let file_name = name.replace(' ', "_");
     let tab_file_name = format!("Data:{file_name}{TAB_EXT}");
     let chart_file_name = format!("Data:{file_name}{CHART_EXT}");
     let mut modded_template = template.clone();
     // width is handled separately
     modded_template.params.remove("width");
-    let out = gen_graph_chart(name, &modded_template.params)?;
+    let out = gen_graph_chart(name, &modded_template.params, rev_url)?;
 
     // Save the tab and chart files
     let tab_text = serde_json::to_string_pretty(&out.tab)?;
@@ -49,7 +49,7 @@ async fn create_pages(bot: &Bot, template: &Template, name: &str) -> anyhow::Res
         match tab_file_page
             .save(
                 tab_text,
-                &SaveOptions::summary("GraphPort: Create tab file").mark_as_bot(true),
+                &SaveOptions::summary(&format!("GraphPort: Create tab file with data from a {} template. Source: {}", template.name, rev_url)).mark_as_bot(true),
             )
             .await
         {
@@ -73,7 +73,7 @@ async fn create_pages(bot: &Bot, template: &Template, name: &str) -> anyhow::Res
         match chart_file_page
             .save(
                 chart_text,
-                &SaveOptions::summary("GraphPort: Create chart file").mark_as_bot(true),
+                &SaveOptions::summary(&format!("GraphPort: Create chart file with data from a {} template. Source: {}", template.name, rev_url)).mark_as_bot(true),
             )
             .await
         {
@@ -100,11 +100,12 @@ async fn create_pages(bot: &Bot, template: &Template, name: &str) -> anyhow::Res
     Ok(format!("{}{inside}{}", "{{", "}}"))
 }
 
-#[tracing::instrument(skip(bot, parsed))]
-async fn handle_template(bot: &Bot, parsed: Template, title: &str) -> anyhow::Result<Option<Swap>> {
+#[tracing::instrument(skip(bot, parsed, page, rev_info, config))]
+async fn handle_template(bot: &Bot, parsed: Template, page: Page, rev_info: Option<RevInfo>, config: &RwLock<Config>) -> anyhow::Result<Option<Swap>> {
     let mut parsed = parsed;
+    let title = page.title().to_string();
     match &*parsed.name {
-        "PortGraph" => {
+        "PortGraph" | "Graph:Chart" | "GraphChart" => {
             let mut name = parsed.params.get("name").cloned().flatten();
 
             // Special handling for demographics related pages
@@ -115,8 +116,11 @@ async fn handle_template(bot: &Bot, parsed: Template, title: &str) -> anyhow::Re
                 if country.is_empty() {
                     bail!("Country name empty, unreachable");
                 }
+                if parsed.params.get("y2Title").cloned().flatten().is_some() {
+                    bail!("y2Title is not supported for demographics pages without template graph name");
+                }
                 match &*parsed.params.get("y1Title").cloned().flatten().ok_or_else(|| {
-                    anyhow::anyhow!("'y1Title' parameter is required for PortGraph on demographics pages without template graph name")
+                    anyhow::anyhow!("'y1Title' parameter is required on demographics pages without template graph name")
                 })?.to_ascii_lowercase() {
                     s if s.starts_with("population") => {
                         name = Some(format!("{country} Total Population"));
@@ -148,7 +152,13 @@ async fn handle_template(bot: &Bot, parsed: Template, title: &str) -> anyhow::Re
             let name = name.ok_or_else(|| {
                 anyhow::anyhow!("'name' parameter is required for ConvertGraphChart")
             })?;
-            let swap = create_pages(bot, &parsed, &name)
+            // TODO: add section support
+            let rev_url = if let Some(rev_info) = rev_info {
+                format!("{}w/index.php?title={}&oldid={}", config.read().await.wiki, title.replace(" ", "_"), rev_info.id)
+            } else {
+                format!("{}w/index.php?title={}", config.read().await.wiki, title.replace(" ", "_"))
+            };
+            let swap = create_pages(bot, &parsed, &name, &rev_url)
                 .await
                 .context("Failed to generate/create pages")?;
             Ok(Some(Swap {
@@ -163,6 +173,7 @@ async fn handle_template(bot: &Bot, parsed: Template, title: &str) -> anyhow::Re
 #[tracing::instrument(skip_all)]
 pub async fn run_on_page(
     page: Page,
+    rev_info: Option<RevInfo>,
     commons_bot: &Bot,
     _wiki_bot: &Bot,
     config: &RwLock<Config>,
@@ -185,7 +196,7 @@ pub async fn run_on_page(
 
     let mut tasks = vec![];
     for parsed in p.templates {
-        tasks.push(async { handle_template(commons_bot, parsed, page.title()).await });
+        tasks.push(async { handle_template(commons_bot, parsed, page.clone(), rev_info.clone(), config).await });
     }
     let task_results = futures::future::join_all(tasks).await;
 
@@ -241,14 +252,18 @@ async fn page_handler(
     wiki_bot: Arc<Bot>,
     config: Arc<RwLock<Config>>,
 ) {
-    while let Some((page, result_handler)) = rx.lock().await.recv().await {
-        if tokio::fs::metadata("shutdown.txt").await.is_ok() {
-            info!("Shutdown file found, exiting.");
+    loop {
+        let mut rx_lock = rx.lock().await;
+        if let Some((page, rev_info, result_handler)) = rx_lock.recv().await {
+            drop(rx_lock);
+            result_handler
+                .send(run_on_page(page, rev_info, &commons_bot, &wiki_bot, &config).await)
+                .unwrap();
+        } else {
+            // Channel closed, exit the loop
+            info!("Page request channel closed, exiting worker.");
             break;
         }
-        result_handler
-            .send(run_on_page(page, &commons_bot, &wiki_bot, &config).await)
-            .unwrap();
     }
 }
 
@@ -265,12 +280,14 @@ async fn spawn_workers(
         .num_workers
         .unwrap_or_else(|| num_cpus::get().clamp(1, 8));
     let mut workers = Vec::with_capacity(num_workers);
-    for _ in 0..num_workers {
+    trace!("Spawning {} workers for page handling", num_workers);
+    for i in 0..num_workers {
         let wiki_bot = Arc::clone(wiki_bot);
         let commons_bot = Arc::clone(commons_bot);
         let config = Arc::clone(config);
         let rx = Arc::clone(rx);
-        let worker = tokio::spawn(async move {
+        let worker = task::spawn(async move {
+            info!("Starting worker #{i} for page handling");
             page_handler(rx, commons_bot, wiki_bot, config).await;
         });
         workers.push(worker);
@@ -292,19 +309,19 @@ pub async fn graph_task(
 
     let failed_revs = Arc::new(FailedRevs::load().await?);
 
-    info!("Starting GraphPort bot");
+    info!("Starting Graph Port task");
 
     // Create workers
     let (page_sender, page_reciever) = mpsc::channel(100);
     let rx = Arc::new(Mutex::new(page_reciever));
-    let workers = spawn_workers(&wiki_bot, &commons_bot, &config, &rx);
+    let workers = spawn_workers(&wiki_bot, &commons_bot, &config, &rx).await;
 
     loop {
         if config.read().await.shutdown_graph_task {
             info!("Shutdown flag is set, exiting.");
             break;
         }
-        if config.read().await.paused {
+        if config.read().await.pause_graph_task {
             tokio::time::sleep(Duration::from_secs(1)).await;
             continue;
         }
@@ -312,17 +329,28 @@ pub async fn graph_task(
         let generator = CategoryMembers::new(&config.read().await.graph_task.search_category)
             .sort(CategoryMemberSort::Timestamp);
         let mut output = generator.generate(&wiki_bot);
-        while let Some(Ok(o)) = output.recv().await {
+        while let Some(o) = output.recv().await {
+            if let Err(e) = o {
+                error!("Error receiving page: {e}");
+                continue;
+            }
+            let o = o?;
+            debug!("Processing page: {}", o.title());
             let revid = api_utils::get_revid(&o, &wiki_bot).await;
             let page_title = o.title().to_string();
-            let rev_info = revid.map(|id| RevInfo::new(id, page_title));
+            let rev_info = revid.map(|id| RevInfo::new(id, page_title.clone()));
             if let Some(ref rev_info) = rev_info {
                 if failed_revs.contains_key(rev_info).await? {
-                    warn!(
+                    debug!(
                         "Skipping page {} with revision ID {} due to previous failure",
                         rev_info.page_title, rev_info.id
                     );
                     continue;
+                } else {
+                    trace!(
+                        "Processing page {} with revision ID {}",
+                        rev_info.page_title, rev_info.id
+                    );
                 }
             }
             if config.read().await.shutdown_graph_task {
@@ -331,9 +359,11 @@ pub async fn graph_task(
             }
 
             let (send, rec) = oneshot::channel();
-            if let Err(e) = page_sender.send((o, send)).await {
+            if let Err(e) = page_sender.send((o, rev_info.clone(), send)).await {
                 error!("Failed to send page to handler: {e}");
                 continue;
+            } else {
+                trace!("Page {page_title} sent to handlers");
             }
             task::spawn({
                 let failed_revs = Arc::clone(&failed_revs);

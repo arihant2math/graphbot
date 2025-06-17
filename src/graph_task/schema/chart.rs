@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::graph_task::schema::LocalizableString;
+use crate::graph_task::schema::{LocalizableString, MediaWikiCategories};
 
 fn default_axis_format() -> String {
     "None".to_string()
@@ -61,6 +61,9 @@ pub struct Chart {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub title: Option<LocalizableString>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub mediawikiCategories: Option<MediaWikiCategories>
 }
 
 impl Default for Chart {
@@ -73,6 +76,7 @@ impl Default for Chart {
             x_axis: None,
             y_axis: None,
             title: None,
+            mediawikiCategories: Some(MediaWikiCategories::chart()),
         }
     }
 }

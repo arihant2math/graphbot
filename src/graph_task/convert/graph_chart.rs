@@ -93,6 +93,7 @@ fn convert_graph_chart_value(value: &str, ty: &str) -> Value {
 pub fn generate(
     name: &str,
     tag: &HashMap<String, Option<String>>,
+    source_url: &str,
 ) -> anyhow::Result<ConversionOutput> {
     let supported_attrs = [
         "type",
@@ -172,11 +173,11 @@ pub fn generate(
     };
     Ok(ConversionOutput {
         chart,
-        tab: gen_tab(tag)?,
+        tab: gen_tab(tag, source_url)?,
     })
 }
 
-fn gen_tab(tag: &HashMap<String, Option<String>>) -> anyhow::Result<Tab> {
+fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::Result<Tab> {
     let x_type = convert_graph_types(
         &tag.get("xType")
             .cloned()
@@ -237,6 +238,7 @@ fn gen_tab(tag: &HashMap<String, Option<String>>) -> anyhow::Result<Tab> {
     };
     let table = Tab {
         license: LICENSE.to_string(),
+        sources: Some(source_url.to_string()),
         description: tag
             .get("description")
             .cloned()
@@ -258,6 +260,7 @@ fn gen_tab(tag: &HashMap<String, Option<String>>) -> anyhow::Result<Tab> {
                 out
             })
             .collect(),
+        ..Default::default()
     };
     Ok(table)
 }

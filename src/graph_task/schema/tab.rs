@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::graph_task::schema::LocalizableString;
+use crate::graph_task::schema::{LocalizableString, MediaWikiCategories};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Field {
@@ -30,5 +30,24 @@ pub struct Tab {
     #[serde(default)]
     pub description: Option<LocalizableString>,
     pub schema: Schema,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub sources: Option<String>,
     pub data: Vec<Vec<Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub mediawikiCategories: Option<MediaWikiCategories>
+}
+
+impl Default for Tab {
+    fn default() -> Self {
+        Tab {
+            license: "CC-BY-SA-4.0".to_string(),
+            description: None,
+            schema: Schema::from(vec![]),
+            data: vec![],
+            sources: None,
+            mediawikiCategories: Some(MediaWikiCategories::tab()),
+        }
+    }
 }

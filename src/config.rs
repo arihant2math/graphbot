@@ -87,7 +87,7 @@ pub struct Config {
     pub server: Server,
     pub graph_task: GraphTask,
     pub shutdown_graph_task: bool,
-    pub paused: bool,
+    pub pause_graph_task: bool,
 }
 
 impl Config {
@@ -102,8 +102,7 @@ impl Config {
             server: main.server,
             graph_task: main.graph_task,
             shutdown_graph_task: false,
-            // TODO: Make false, or atleast configurable
-            paused: true,
+            pause_graph_task: false,
         }
     }
 

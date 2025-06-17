@@ -42,7 +42,9 @@ fn init_logging(_config: &RwLock<Config>) -> non_blocking::WorkerGuard {
     let stdout_layer = fmt::Layer::new()
         .with_ansi(true)
         .with_writer(std::io::stdout)
-        .with_filter(EnvFilter::new("info"));
+        .with_filter(EnvFilter::new("info")
+            .add_directive("sqlx::query=warn".parse().unwrap())
+        );
 
     let file_layer = fmt::Layer::new()
         .with_ansi(false)
@@ -52,7 +54,8 @@ fn init_logging(_config: &RwLock<Config>) -> non_blocking::WorkerGuard {
                 .add_directive("hyper=info".parse().unwrap())
                 .add_directive("h2=info".parse().unwrap())
                 .add_directive("mwbot=debug".parse().unwrap())
-                .add_directive("parsoid=debug".parse().unwrap()),
+                .add_directive("parsoid=debug".parse().unwrap())
+                .add_directive("sqlx::query=info".parse().unwrap())
         );
 
     let subscriber = tracing_subscriber::registry()
@@ -97,7 +100,7 @@ async fn main() -> anyhow::Result<()> {
     let commons_bot = Arc::new(commons_bot);
     let config = Arc::new(config);
 
-    let server_task = task::spawn({
+    let _server_task = task::spawn({
         let config = Arc::clone(&config);
         async move {
             if let Err(e) = server::run(config).await {
@@ -111,7 +114,7 @@ async fn main() -> anyhow::Result<()> {
         let commons_bot = Arc::clone(&commons_bot);
         let config = Arc::clone(&config);
         async move {
-            if let Err(e) = graph_task::graph_task(wiki_bot, commons_bot, config).await {
+            if let Err(e) = graph_task::graph_task(commons_bot, wiki_bot, config).await {
                 error!("Graph task failed: {e}");
             }
         }

@@ -4,8 +4,8 @@ mod failed_revs;
 mod graph_task;
 mod parser;
 mod rev_info;
-mod server;
 mod rfd_task;
+mod server;
 
 use std::sync::Arc;
 

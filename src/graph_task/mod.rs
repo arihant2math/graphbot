@@ -1,7 +1,8 @@
-use std::{sync::Arc, time::Duration};
-use std::path::Path;
+use std::{path::Path, sync::Arc, time::Duration};
+
 use anyhow::{Context, bail};
 use convert::gen_graph_chart;
+use graphbot_db::prelude::GraphFailedConversions;
 use mwbot::{
     Bot, Page, SaveOptions,
     generators::{CategoryMemberSort, CategoryMembers, Generator},
@@ -14,7 +15,7 @@ use tokio::{
     time::sleep,
 };
 use tracing::{debug, error, info, trace, warn};
-use graphbot_db::prelude::GraphFailedConversions;
+
 use crate::{
     CHART_EXT, TAB_EXT, api_utils,
     config::Config,
@@ -339,7 +340,6 @@ pub async fn graph_task(
         error!("Parser failed to parse empty string, are you sure it is running? {e}");
         return Err(e);
     }
-
 
     // if db/graph.db doesn't exist, populate it
     if !Path::new("db/graph.db").exists() {

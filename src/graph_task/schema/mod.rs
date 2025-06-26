@@ -39,10 +39,6 @@ impl MediaWikiCategory {
 pub struct MediaWikiCategories(pub Vec<MediaWikiCategory>);
 
 impl MediaWikiCategories {
-    pub fn new(categories: Vec<MediaWikiCategory>) -> Self {
-        Self(categories)
-    }
-
     pub fn chart() -> Self {
         Self(vec![MediaWikiCategory::chart()])
     }

@@ -48,7 +48,7 @@ impl Default for Tab {
             schema: Schema::from(vec![]),
             data: vec![],
             sources: None,
-            mediawikiCategories: Some(MediaWikiCategories::tab()),
+            mediawiki_categories: Some(MediaWikiCategories::tab()),
         }
     }
 }

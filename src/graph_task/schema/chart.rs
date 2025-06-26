@@ -73,7 +73,8 @@ pub struct Chart {
     pub title: Option<LocalizableString>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub mediawikiCategories: Option<MediaWikiCategories>,
+    #[serde(rename = "mediawikiCategories")]
+    pub mediawiki_categories: Option<MediaWikiCategories>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub transform: Option<Transform>,
@@ -89,7 +90,7 @@ impl Default for Chart {
             x_axis: None,
             y_axis: None,
             title: None,
-            mediawikiCategories: Some(MediaWikiCategories::chart()),
+            mediawiki_categories: Some(MediaWikiCategories::chart()),
             transform: None,
         }
     }

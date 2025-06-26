@@ -1,4 +1,4 @@
-# Graph Port
+# GraphBot
 Quickly convert old graphs from the graph extension to the chart extension.
 
 ## Requirements
@@ -13,4 +13,4 @@ First start the parsing server:
 `uv run server.py`
 
 Then run the bot:
-`cargo run -- [Article]`
+`cargo run`

@@ -88,6 +88,8 @@ pub struct Config {
     pub graph_task: GraphTask,
     pub shutdown_graph_task: bool,
     pub pause_graph_task: bool,
+    pub shutdown_rfd_task: bool,
+    pub pause_rfd_task: bool,
 }
 
 impl Config {
@@ -103,6 +105,8 @@ impl Config {
             graph_task: main.graph_task,
             shutdown_graph_task: false,
             pause_graph_task: false,
+            shutdown_rfd_task: false,
+            pause_rfd_task: false
         }
     }
 

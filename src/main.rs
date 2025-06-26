@@ -118,6 +118,15 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     });
+    let rfd_task = task::spawn({
+        let wiki_bot = Arc::clone(&wiki_bot);
+        let config = Arc::clone(&config);
+        async move {
+            if let Err(e) = rfd_task::rfd_task(wiki_bot, config).await {
+                error!("RFD task failed: {e}");
+            }
+        }
+    });
     let shutdown_task: task::JoinHandle<anyhow::Result<()>> = task::spawn({
         let wiki_bot = Arc::clone(&wiki_bot);
         let commons_bot = Arc::clone(&commons_bot);
@@ -134,9 +143,10 @@ async fn main() -> anyhow::Result<()> {
             }
             tracing::info!("Shutting down gracefully...");
             config.write().await.shutdown_graph_task = true;
+            config.write().await.shutdown_rfd_task = true;
             Ok(())
         }
     });
-    let (_, _) = join!(graph_task, shutdown_task);
+    let _ = join!(graph_task, rfd_task, shutdown_task);
     Ok(())
 }

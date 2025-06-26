@@ -5,6 +5,7 @@ mod graph_task;
 mod parser;
 mod rev_info;
 mod server;
+mod rfd_task;
 
 use std::sync::Arc;
 

@@ -47,7 +47,7 @@ pub enum ChartType {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct Transform {
+pub struct Transform {
     pub module: String,
     pub function: String,
     pub args: HashMap<String, Value>,

@@ -8,7 +8,7 @@ pub struct FailedRevs(DatabaseConnection);
 
 impl FailedRevs {
     pub async fn load() -> anyhow::Result<Self> {
-        let db = Database::connect("sqlite://db/main.db").await?;
+        let db = Database::connect("sqlite://db/graph.db").await?;
         Ok(Self(db))
     }
 

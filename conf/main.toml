@@ -1,6 +1,8 @@
-search_category = "Category:Graphs_to_Port"
 username = "GraphBot"
 wiki = "https://en.wikipedia.org/"
+
+[graph_task]
+search_category = "Category:Graphs_to_Port"
 
 [rpc]
 port = 8000

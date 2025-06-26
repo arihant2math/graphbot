@@ -1,4 +1,7 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::graph_task::schema::{LocalizableString, MediaWikiCategories};
 
@@ -43,6 +46,13 @@ pub enum ChartType {
     Area,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct Transform {
+    pub module: String,
+    pub function: String,
+    pub args: HashMap<String, Value>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Chart {
     pub license: String,
@@ -63,7 +73,10 @@ pub struct Chart {
     pub title: Option<LocalizableString>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub mediawikiCategories: Option<MediaWikiCategories>
+    pub mediawikiCategories: Option<MediaWikiCategories>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub transform: Option<Transform>,
 }
 
 impl Default for Chart {
@@ -77,6 +90,7 @@ impl Default for Chart {
             y_axis: None,
             title: None,
             mediawikiCategories: Some(MediaWikiCategories::chart()),
+            transform: None,
         }
     }
 }

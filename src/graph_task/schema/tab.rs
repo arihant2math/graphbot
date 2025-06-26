@@ -36,7 +36,7 @@ pub struct Tab {
     pub data: Vec<Vec<Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub mediawikiCategories: Option<MediaWikiCategories>
+    pub mediawikiCategories: Option<MediaWikiCategories>,
 }
 
 impl Default for Tab {

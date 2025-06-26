@@ -1,11 +1,12 @@
 use std::{sync::Arc, time::Duration};
-
+use std::path::Path;
 use anyhow::{Context, bail};
 use convert::gen_graph_chart;
 use mwbot::{
     Bot, Page, SaveOptions,
     generators::{CategoryMemberSort, CategoryMembers, Generator},
 };
+use sea_orm::{ConnectionTrait, Database, Schema};
 use tokio::{
     sync::{Mutex, RwLock, mpsc, mpsc::Receiver, oneshot, oneshot::Sender},
     task,
@@ -13,7 +14,7 @@ use tokio::{
     time::sleep,
 };
 use tracing::{debug, error, info, trace, warn};
-
+use graphport_db::prelude::GraphFailedConversions;
 use crate::{
     CHART_EXT, TAB_EXT, api_utils,
     config::Config,
@@ -33,7 +34,12 @@ struct Swap {
 }
 
 #[tracing::instrument(skip(bot, template))]
-async fn create_pages(bot: &Bot, template: &Template, name: &str, rev_url: &str) -> anyhow::Result<String> {
+async fn create_pages(
+    bot: &Bot,
+    template: &Template,
+    name: &str,
+    rev_url: &str,
+) -> anyhow::Result<String> {
     let file_name = name.replace(' ', "_");
     let tab_file_name = format!("Data:{file_name}{TAB_EXT}");
     let chart_file_name = format!("Data:{file_name}{CHART_EXT}");
@@ -49,7 +55,11 @@ async fn create_pages(bot: &Bot, template: &Template, name: &str, rev_url: &str)
         match tab_file_page
             .save(
                 tab_text,
-                &SaveOptions::summary(&format!("GraphPort: Create tab file with data from a {} template. Source: {}", template.name, rev_url)).mark_as_bot(true),
+                &SaveOptions::summary(&format!(
+                    "GraphPort: Create tab file with data from a {} template. Source: {}",
+                    template.name, rev_url
+                ))
+                .mark_as_bot(true),
             )
             .await
         {
@@ -73,7 +83,11 @@ async fn create_pages(bot: &Bot, template: &Template, name: &str, rev_url: &str)
         match chart_file_page
             .save(
                 chart_text,
-                &SaveOptions::summary(&format!("GraphPort: Create chart file with data from a {} template. Source: {}", template.name, rev_url)).mark_as_bot(true),
+                &SaveOptions::summary(&format!(
+                    "GraphPort: Create chart file with data from a {} template. Source: {}",
+                    template.name, rev_url
+                ))
+                .mark_as_bot(true),
             )
             .await
         {
@@ -93,15 +107,21 @@ async fn create_pages(bot: &Bot, template: &Template, name: &str, rev_url: &str)
     }
     info!("Successfully created tab and chart files for {name}.");
     let inside = if let Some(width) = template.params.get("width").cloned().flatten() {
-        format!("ChartDisplay|definition={name}{CHART_EXT}|data={name}{TAB_EXT}|Width={width}")
+        format!("Chart|definition={name}{CHART_EXT}|data={name}{TAB_EXT}|Width={width}")
     } else {
-        format!("ChartDisplay|definition={name}{CHART_EXT}|data={name}{TAB_EXT}")
+        format!("Chart|definition={name}{CHART_EXT}|data={name}{TAB_EXT}")
     };
     Ok(format!("{}{inside}{}", "{{", "}}"))
 }
 
 #[tracing::instrument(skip(bot, parsed, page, rev_info, config))]
-async fn handle_template(bot: &Bot, parsed: Template, page: Page, rev_info: Option<RevInfo>, config: &RwLock<Config>) -> anyhow::Result<Option<Swap>> {
+async fn handle_template(
+    bot: &Bot,
+    parsed: Template,
+    page: Page,
+    rev_info: Option<RevInfo>,
+    config: &RwLock<Config>,
+) -> anyhow::Result<Option<Swap>> {
     let mut parsed = parsed;
     let title = page.title().to_string();
     match &*parsed.name {
@@ -117,7 +137,9 @@ async fn handle_template(bot: &Bot, parsed: Template, page: Page, rev_info: Opti
                     bail!("Country name empty, unreachable");
                 }
                 if parsed.params.get("y2Title").cloned().flatten().is_some() {
-                    bail!("y2Title is not supported for demographics pages without template graph name");
+                    bail!(
+                        "y2Title is not supported for demographics pages without template graph name"
+                    );
                 }
                 match &*parsed.params.get("y1Title").cloned().flatten().ok_or_else(|| {
                     anyhow::anyhow!("'y1Title' parameter is required on demographics pages without template graph name")
@@ -154,9 +176,18 @@ async fn handle_template(bot: &Bot, parsed: Template, page: Page, rev_info: Opti
             })?;
             // TODO: add section support
             let rev_url = if let Some(rev_info) = rev_info {
-                format!("{}w/index.php?title={}&oldid={}", config.read().await.wiki, title.replace(" ", "_"), rev_info.id)
+                format!(
+                    "{}w/index.php?title={}&oldid={}",
+                    config.read().await.wiki,
+                    title.replace(" ", "_"),
+                    rev_info.id
+                )
             } else {
-                format!("{}w/index.php?title={}", config.read().await.wiki, title.replace(" ", "_"))
+                format!(
+                    "{}w/index.php?title={}",
+                    config.read().await.wiki,
+                    title.replace(" ", "_")
+                )
             };
             let swap = create_pages(bot, &parsed, &name, &rev_url)
                 .await
@@ -196,7 +227,9 @@ pub async fn run_on_page(
 
     let mut tasks = vec![];
     for parsed in p.templates {
-        tasks.push(async { handle_template(commons_bot, parsed, page.clone(), rev_info.clone(), config).await });
+        tasks.push(async {
+            handle_template(commons_bot, parsed, page.clone(), rev_info.clone(), config).await
+        });
     }
     let task_results = futures::future::join_all(tasks).await;
 
@@ -307,6 +340,17 @@ pub async fn graph_task(
         return Err(e);
     }
 
+
+    // if db/graph.db doesn't exist, populate it
+    if !Path::new("db/graph.db").exists() {
+        std::fs::create_dir_all("db")?;
+        std::fs::write("db/graph.db", "")?;
+        let db = Database::connect("sqlite://db/graph.db").await?;
+        let backend = db.get_database_backend();
+        let schema = Schema::new(backend);
+        let table_create_statement = schema.create_table_from_entity(GraphFailedConversions);
+        let _ = db.execute(backend.build(&table_create_statement)).await?;
+    }
     let failed_revs = Arc::new(FailedRevs::load().await?);
 
     info!("Starting Graph Port task");

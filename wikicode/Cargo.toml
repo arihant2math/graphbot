@@ -1,0 +1,9 @@
+[package]
+name = "wikicode"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+phf = "0.11.3"
+regex = "1.11.1"
+once_cell = "1.21.3"

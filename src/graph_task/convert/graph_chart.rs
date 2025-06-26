@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::anyhow;
+use sea_orm::Iden;
 use serde_json::{Number, Value};
 use tracing::warn;
 
@@ -43,7 +44,9 @@ fn parse_number(value: &str) -> Option<Number> {
     // Replace the unicode minus sign with a regular hyphen
     // This was 20 minutes of debugging, because the minus sign was not being parsed
     // correctly
-    let value = value.replace("\u{2212}", "-");
+    let mut value = value.replace("\u{2212}", "-");
+    value = value.trim().to_string();
+
     if let Ok(i) = value.parse::<i128>() {
         return Number::from_i128(i);
     } else if let Ok(f) = value.parse::<f64>() {

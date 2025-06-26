@@ -42,9 +42,7 @@ fn init_logging(_config: &RwLock<Config>) -> non_blocking::WorkerGuard {
     let stdout_layer = fmt::Layer::new()
         .with_ansi(true)
         .with_writer(std::io::stdout)
-        .with_filter(EnvFilter::new("info")
-            .add_directive("sqlx::query=warn".parse().unwrap())
-        );
+        .with_filter(EnvFilter::new("info").add_directive("sqlx::query=warn".parse().unwrap()));
 
     let file_layer = fmt::Layer::new()
         .with_ansi(false)
@@ -55,7 +53,7 @@ fn init_logging(_config: &RwLock<Config>) -> non_blocking::WorkerGuard {
                 .add_directive("h2=info".parse().unwrap())
                 .add_directive("mwbot=debug".parse().unwrap())
                 .add_directive("parsoid=debug".parse().unwrap())
-                .add_directive("sqlx::query=info".parse().unwrap())
+                .add_directive("sqlx::query=info".parse().unwrap()),
         );
 
     let subscriber = tracing_subscriber::registry()

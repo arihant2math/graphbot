@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "graphport-db"
-, "mwparserfromhell-rs"]
+, "wikicode"]
 
 [workspace.dependencies]
 sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls", "macros" ] }

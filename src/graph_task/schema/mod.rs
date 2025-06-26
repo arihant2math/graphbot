@@ -18,7 +18,7 @@ impl LocalizableString {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MediaWikiCategory {
-    pub name: String
+    pub name: String,
 }
 
 impl MediaWikiCategory {

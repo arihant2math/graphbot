@@ -1,8 +1,3 @@
-#!/bin/bash
-
-# use bash strict mode
-set -euo pipefail
-
 # delete the venv, if it already exists
 rm -rf .venv
 

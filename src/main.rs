@@ -36,7 +36,7 @@ async fn check_shutdown(bot: &Bot, wiki: &str, config: &RwLock<Config>) -> anyho
 }
 
 fn init_logging(_config: &RwLock<Config>) -> non_blocking::WorkerGuard {
-    let file_appender = rolling::hourly("logs/", "graphport.log");
+    let file_appender = rolling::hourly("logs/", "graphbot.log");
     let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
 
     let stdout_layer = fmt::Layer::new()
@@ -67,7 +67,7 @@ const COMMONS_BASE_URL: &str = "https://commons.wikimedia.org/";
 const COMMONS_API_URL: &str = "https://commons.wikimedia.org/w/api.php";
 const COMMONS_REST_URL: &str = "https://commons.wikimedia.org/api/rest_v1";
 
-const USER_AGENT: &str = "GraphPort/1";
+const USER_AGENT: &str = "GraphBot/1";
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

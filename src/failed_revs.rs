@@ -14,7 +14,7 @@ impl FailedRevs {
 
     pub async fn get(&self, rev_info: &RevInfo) -> anyhow::Result<Option<String>> {
         let prev =
-            graphport_db::prelude::GraphFailedConversions::find_by_id(rev_info.page_title.clone())
+            graphbot_db::prelude::GraphFailedConversions::find_by_id(rev_info.page_title.clone())
                 .one(&self.0)
                 .await?;
         if let Some(prev) = prev {
@@ -27,7 +27,7 @@ impl FailedRevs {
     pub async fn insert(&self, rev_info: RevInfo, error: anyhow::Error) -> anyhow::Result<()> {
         let error = error.to_string();
         if let Some(entry) =
-            graphport_db::prelude::GraphFailedConversions::find_by_id(rev_info.page_title.clone())
+            graphbot_db::prelude::GraphFailedConversions::find_by_id(rev_info.page_title.clone())
                 .one(&self.0)
                 .await?
         {
@@ -37,7 +37,7 @@ impl FailedRevs {
             updated_entry.date = ActiveValue::NotSet; // Force update date to current time
             updated_entry.update(&self.0).await?;
         } else {
-            let new_entry = graphport_db::graph_failed_conversions::ActiveModel {
+            let new_entry = graphbot_db::graph_failed_conversions::ActiveModel {
                 page_title: ActiveValue::Set(rev_info.page_title.clone()),
                 rev_id: ActiveValue::Set(rev_info.id as i32),
                 error: ActiveValue::Set(Some(error)),
@@ -50,7 +50,7 @@ impl FailedRevs {
 
     pub async fn contains_key(&self, rev_info: &RevInfo) -> anyhow::Result<bool> {
         let prev =
-            graphport_db::prelude::GraphFailedConversions::find_by_id(rev_info.page_title.clone())
+            graphbot_db::prelude::GraphFailedConversions::find_by_id(rev_info.page_title.clone())
                 .one(&self.0)
                 .await?;
         Ok(prev.is_some())

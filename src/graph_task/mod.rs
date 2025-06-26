@@ -14,7 +14,7 @@ use tokio::{
     time::sleep,
 };
 use tracing::{debug, error, info, trace, warn};
-use graphport_db::prelude::GraphFailedConversions;
+use graphbot_db::prelude::GraphFailedConversions;
 use crate::{
     CHART_EXT, TAB_EXT, api_utils,
     config::Config,
@@ -56,7 +56,7 @@ async fn create_pages(
             .save(
                 tab_text,
                 &SaveOptions::summary(&format!(
-                    "GraphPort: Create tab file with data from a {} template. Source: {}",
+                    "GraphBot: Create tab file with data from a {} template. Source: {}",
                     template.name, rev_url
                 ))
                 .mark_as_bot(true),
@@ -84,7 +84,7 @@ async fn create_pages(
             .save(
                 chart_text,
                 &SaveOptions::summary(&format!(
-                    "GraphPort: Create chart file with data from a {} template. Source: {}",
+                    "GraphBot: Create chart file with data from a {} template. Source: {}",
                     template.name, rev_url
                 ))
                 .mark_as_bot(true),

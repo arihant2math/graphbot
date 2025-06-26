@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "graphport-db"
+    "graphbot-db"
 , "wikicode"]
 
 [workspace.dependencies]
@@ -8,7 +8,7 @@ sea-orm = { version = "1.1", features = ["sqlx-sqlite", "runtime-tokio-rustls", 
 
 
 [package]
-name = "graphport"
+name = "graphbot"
 version = "0.1.0"
 edition = "2024"
 
@@ -16,7 +16,7 @@ edition = "2024"
 anyhow = "1.0"
 axum = "0.8"
 futures = "0.3"
-graphport-db = { path = "graphport-db" }
+graphbot-db = { path = "graphbot-db" }
 mwbot = "0.6"
 num_cpus = "1.17.0"
 sea-orm = { workspace = true }

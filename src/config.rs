@@ -91,7 +91,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_parts(secret: Secret, main: Main) -> Self {
+    fn from_parts(secret: Secret, main: Main) -> Self {
         Config {
             access_token: secret.access_token,
             client_secret: secret.client_secret,
@@ -106,7 +106,7 @@ impl Config {
         }
     }
 
-    pub fn into_parts(self) -> (Secret, Main) {
+    fn into_parts(self) -> (Secret, Main) {
         (
             Secret {
                 access_token: self.access_token,

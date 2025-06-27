@@ -1,3 +1,4 @@
 toolforge jobs delete bot
-cp ./target/release/graphbot ~
+mkdir -p ~/bin
+cp ./target/release/graphbot ~/bin
 toolforge jobs run bot --command ~/graphbot --image python3.11 --continuous

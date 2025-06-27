@@ -1,2 +1,2 @@
 toolforge jobs delete pyserver
-toolforge jobs run pyserver --command "cd $PWD && source .venv/bin/activate && ./scripts/run_python.sh" --image python3.11 --continuous
+toolforge jobs run pyserver --command "cd $PWD && bash ./scripts/python_run.bash" --image python3.11 --continuous

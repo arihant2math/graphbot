@@ -22,6 +22,7 @@ pub struct Rpc {
 impl Default for Rpc {
     fn default() -> Self {
         Rpc {
+            host: "localhost".to_string(),
             port: 8080,
             path: "api".to_string(),
         }

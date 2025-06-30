@@ -14,6 +14,7 @@ const MAIN_FILE: &str = "conf/main.toml";
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Rpc {
+    pub host: String,
     pub port: u16,
     pub path: String,
 }

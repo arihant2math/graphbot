@@ -25,8 +25,8 @@ pub async fn call_parser(input: &str, config: &RwLock<Config>) -> anyhow::Result
     client
         .call(
             &xml_rpc::Url::parse(&format!(
-                "http://localhost:{}/{}",
-                config.rpc.port, config.rpc.path
+                "http://{}:{}/{}",
+                config.rpc.host, config.rpc.port, config.rpc.path
             ))?,
             "parse",
             [input],

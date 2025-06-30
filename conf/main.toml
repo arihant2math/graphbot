@@ -5,6 +5,6 @@ wiki = "https://en.wikipedia.org/"
 search_category = "Category:Graphs_to_Port"
 
 [rpc]
-host = "pyserver"
+host = "localhost"
 port = 8000
 path = "/RPC2"

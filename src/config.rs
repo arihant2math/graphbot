@@ -1,3 +1,4 @@
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
 const SECRET_FILE: &str = "conf/secret.toml";
@@ -128,8 +129,8 @@ impl Config {
     }
 
     pub fn load() -> anyhow::Result<Self> {
-        let secret = toml::from_str(&std::fs::read_to_string(SECRET_FILE)?)?;
-        let main = toml::from_str(&std::fs::read_to_string(MAIN_FILE)?)?;
+        let secret = toml::from_str(&std::fs::read_to_string(SECRET_FILE).context("Failed to open secret config file")?).context("Failed to parse secret config file")?;
+        let main = toml::from_str(&std::fs::read_to_string(MAIN_FILE).context("Failed to open main config file")?).context("Failed to parse main config file")?;
         Ok(Self::from_parts(secret, main))
     }
 }

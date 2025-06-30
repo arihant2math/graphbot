@@ -1,7 +1,7 @@
 use sea_orm::{
     ActiveModelTrait, ActiveValue, Database, DatabaseConnection, EntityTrait, IntoActiveModel,
 };
-
+use sea_orm::sqlx::types::chrono;
 use crate::rev_info::RevInfo;
 
 pub struct FailedRevs(DatabaseConnection);
@@ -34,14 +34,14 @@ impl FailedRevs {
             let mut updated_entry = entry.into_active_model();
             updated_entry.rev_id = ActiveValue::Set(rev_info.id as i32);
             updated_entry.error = ActiveValue::Set(Some(error));
-            updated_entry.date = ActiveValue::NotSet; // Force update date to current time
+            updated_entry.date = ActiveValue::Set(chrono::Utc::now()); // Force update date to current time
             updated_entry.update(&self.0).await?;
         } else {
             let new_entry = graphbot_db::graph_failed_conversions::ActiveModel {
                 page_title: ActiveValue::Set(rev_info.page_title.clone()),
                 rev_id: ActiveValue::Set(rev_info.id as i32),
                 error: ActiveValue::Set(Some(error)),
-                date: ActiveValue::NotSet,
+                date: ActiveValue::Set(chrono::Utc::now()),
             };
             new_entry.insert(&self.0).await?;
         }

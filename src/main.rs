@@ -8,7 +8,7 @@ mod rfd_task;
 mod server;
 
 use std::sync::Arc;
-
+use anyhow::Context;
 use mwbot::Bot;
 use tokio::{join, sync::RwLock, task};
 use tracing::error;
@@ -80,19 +80,20 @@ async fn main() -> anyhow::Result<()> {
     let _guard = init_logging(&config);
     let token = config.read().await.access_token.clone();
     let init_bots_span = tracing::debug_span!("init_bots").entered();
-    let wiki_bot = Bot::builder(api_url.to_string(), rest_url.to_string())
+    let wiki_bot_future = Bot::builder(api_url.to_string(), rest_url.to_string())
         .set_user_agent(USER_AGENT.to_string())
         .set_mark_as_bot(true)
         .set_oauth2_token(config.read().await.username.clone(), token.clone())
-        .build()
-        .await?;
+        .build();
 
-    let commons_bot = Bot::builder(COMMONS_API_URL.to_string(), COMMONS_REST_URL.to_string())
+    let commons_bot_future = Bot::builder(COMMONS_API_URL.to_string(), COMMONS_REST_URL.to_string())
         .set_user_agent(USER_AGENT.to_string())
         .set_mark_as_bot(true)
         .set_oauth2_token(config.read().await.username.clone(), token)
-        .build()
-        .await?;
+        .build();
+    let (wiki_bot, commons_bot) = join!(wiki_bot_future, commons_bot_future);
+    let wiki_bot = wiki_bot.context("Failed to initialize wiki bot")?;
+    let commons_bot = commons_bot.context("Failed to initialize commons bot")?;
     init_bots_span.exit();
 
     let wiki_bot = Arc::new(wiki_bot);

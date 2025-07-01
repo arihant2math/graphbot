@@ -1,5 +1,4 @@
 use sea_orm_migration::{prelude::*, schema::*};
-use sea_orm_migration::sea_orm::sqlx::types::chrono;
 
 #[derive(DeriveMigrationName)]
 pub struct Migration;

@@ -61,6 +61,7 @@ pub async fn report_graph_errors_task(wiki_bot: Arc<Bot>,
 
     let db_url = config.read().await.graph_task.db_url.clone();
     let db = Database::connect(&db_url).await?;
+    info!("Starting Report Graph Port Errors task");
     loop {
         if config.read().await.shutdown_graph_task {
             info!("Shutdown flag is set, exiting.");

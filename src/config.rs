@@ -107,9 +107,9 @@ impl Config {
             server: main.server,
             graph_task: main.graph_task,
             shutdown_graph_task: false,
-            pause_graph_task: true,
-            shutdown_rfd_task: false,
-            pause_rfd_task: false
+            pause_graph_task: false,
+            shutdown_rfd_task: true,
+            pause_rfd_task: true
         }
     }
 

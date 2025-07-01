@@ -6,6 +6,7 @@ mod parser;
 mod rev_info;
 mod rfd_task;
 mod server;
+mod report_graph_errors_task;
 
 use std::sync::Arc;
 use anyhow::Context;

@@ -20,9 +20,10 @@ use crate::{
     CHART_EXT, TAB_EXT, api_utils,
     config::Config,
     failed_revs::FailedRevs,
-    parser::{Template, call_parser},
+    parser::call_parser,
     rev_info::RevInfo,
 };
+use crate::parser::{Node, NodeInnerTemplate};
 
 mod convert;
 pub mod schema;
@@ -37,7 +38,7 @@ struct Swap {
 #[tracing::instrument(skip(bot, template))]
 async fn create_pages(
     bot: &Bot,
-    template: &Template,
+    template: &Node<NodeInnerTemplate>,
     name: &str,
     rev_url: &str,
 ) -> anyhow::Result<String> {
@@ -46,8 +47,8 @@ async fn create_pages(
     let chart_file_name = format!("Data:{file_name}{CHART_EXT}");
     let mut modded_template = template.clone();
     // width is handled separately
-    modded_template.params.remove("width");
-    let out = gen_graph_chart(name, &modded_template.params, rev_url)?;
+    modded_template.params_remove("witdh");
+    let out = gen_graph_chart(name, &modded_template.params_map(), rev_url)?;
 
     // Save the tab and chart files
     let tab_text = serde_json::to_string_pretty(&out.tab)?;
@@ -58,7 +59,7 @@ async fn create_pages(
                 tab_text,
                 &SaveOptions::summary(&format!(
                     "GraphBot: Create tab file with data from a {} template. Source: {}",
-                    template.name, rev_url
+                    template.name_str(), rev_url
                 ))
                 .mark_as_bot(true),
             )
@@ -86,7 +87,7 @@ async fn create_pages(
                 chart_text,
                 &SaveOptions::summary(&format!(
                     "GraphBot: Create chart file with data from a {} template. Source: {}",
-                    template.name, rev_url
+                    template.name_str(), rev_url
                 ))
                 .mark_as_bot(true),
             )
@@ -107,7 +108,7 @@ async fn create_pages(
         warn!("Chart file {chart_file_name} already exists, skipping creation.");
     }
     info!("Successfully created tab and chart files for {name}.");
-    let inside = if let Some(width) = template.params.get("width").cloned().flatten() {
+    let inside = if let Some(width) = template.params_get("width").flatten() {
         format!("Chart|definition={name}{CHART_EXT}|data={name}{TAB_EXT}|Width={width}")
     } else {
         format!("Chart|definition={name}{CHART_EXT}|data={name}{TAB_EXT}")
@@ -118,16 +119,16 @@ async fn create_pages(
 #[tracing::instrument(skip(bot, parsed, page, rev_info, config))]
 async fn handle_template(
     bot: &Bot,
-    parsed: Template,
+    parsed: Node<NodeInnerTemplate>,
     page: Page,
     rev_info: Option<RevInfo>,
     config: &RwLock<Config>,
 ) -> anyhow::Result<Option<Swap>> {
     let mut parsed = parsed;
     let title = page.title().to_string();
-    match &*parsed.name {
+    match parsed.name_str() {
         "PortGraph" | "Graph:Chart" | "GraphChart" => {
-            let mut name = parsed.params.get("name").cloned().flatten();
+            let mut name = parsed.params_get("name").flatten();
 
             // Special handling for demographics related pages
             if name.is_none() && title.starts_with("Demographics of ") {
@@ -137,18 +138,18 @@ async fn handle_template(
                 if country.is_empty() {
                     bail!("Country name empty, unreachable");
                 }
-                if parsed.params.get("y2Title").cloned().flatten().is_some() {
+                if parsed.params_map().get("y2Title").cloned().flatten().is_some() {
                     bail!(
                         "y2Title is not supported for demographics pages without template graph name"
                     );
                 }
-                match &*parsed.params.get("y1Title").cloned().flatten().ok_or_else(|| {
+                match &*parsed.params_map().get("y1Title").cloned().flatten().ok_or_else(|| {
                     anyhow::anyhow!("'y1Title' parameter is required on demographics pages without template graph name")
                 })?.to_ascii_lowercase() {
                     s if s.starts_with("population") => {
                         name = Some(format!("{country} Total Population"));
-                        if !parsed.params.contains_key("title") {
-                            parsed.params.insert("title".to_string(), Some(format!("{country} Population")));
+                        if !parsed.params_map().contains_key("title") {
+                            parsed.params_insert("title".to_string(), Some(format!("{country} Population")));
                         }
                     }
                     s if s.starts_with("natural change") => {
@@ -162,12 +163,12 @@ async fn handle_template(
                     }
                     "total fertility rate" | "tfr" => {
                         name = Some(format!("{country} TFR"));
-                        if !parsed.params.contains_key("title") {
-                            parsed.params.insert("title".to_string(), Some("Total Fertility Rate".to_string()));
+                        if !parsed.params_map().contains_key("title") {
+                            parsed.params_insert("title".to_string(), Some("Total Fertility Rate".to_string()));
                         }
                     }
                     _ => {
-                        bail!("Unsupported y1Title for demographics page: {}", parsed.params.get("y1Title").cloned().flatten().unwrap_or_default());
+                        bail!("Unsupported y1Title for demographics page: {}", parsed.params_map().get("y1Title").cloned().flatten().unwrap_or_default());
                     }
                 }
             }
@@ -194,7 +195,7 @@ async fn handle_template(
                 .await
                 .context("Failed to generate/create pages")?;
             Ok(Some(Swap {
-                from: parsed.wikitext,
+                from: parsed.text,
                 to: swap,
             }))
         }
@@ -227,7 +228,7 @@ pub async fn run_on_page(
     let p = call_parser(&content, config).await?;
 
     let mut tasks = vec![];
-    for parsed in p.templates {
+    for parsed in p.parsed.templates {
         tasks.push(async {
             handle_template(commons_bot, parsed, page.clone(), rev_info.clone(), config).await
         });

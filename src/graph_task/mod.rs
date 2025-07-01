@@ -342,17 +342,7 @@ pub async fn graph_task(
         return Err(e);
     }
 
-    // if db/graph.db doesn't exist, populate it
-    if !Path::new("db/graph.db").exists() {
-        std::fs::create_dir_all("db")?;
-        std::fs::write("db/graph.db", "")?;
-        let db = Database::connect("sqlite://db/graph.db").await?;
-        let backend = db.get_database_backend();
-        let schema = Schema::new(backend);
-        let table_create_statement = schema.create_table_from_entity(GraphFailedConversions);
-        let _ = db.execute(backend.build(&table_create_statement)).await?;
-    }
-    let failed_revs = Arc::new(FailedRevs::load().await?);
+    let failed_revs = Arc::new(FailedRevs::load(&config).await?);
 
     info!("Starting Graph Port task");
 

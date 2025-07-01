@@ -59,7 +59,8 @@ pub async fn report_graph_errors_task(wiki_bot: Arc<Bot>,
         tokio::time::sleep(Duration::from_secs(10)).await;
     }
 
-    let db = Database::connect("sqlite://db/graph.db").await?;
+    let db_url = config.read().await.graph_task.db_url.clone();
+    let db = Database::connect(&db_url).await?;
     loop {
         if config.read().await.shutdown_graph_task {
             info!("Shutdown flag is set, exiting.");

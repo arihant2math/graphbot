@@ -2,6 +2,7 @@ username = "GraphBot"
 wiki = "https://en.wikipedia.org/"
 
 [graph_task]
+db_url = "sqlite://db/graph.db"
 search_category = "Category:Graphs_to_Port"
 
 [rpc]

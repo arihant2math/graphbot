@@ -42,6 +42,7 @@ impl Default for Server {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct GraphTask {
+    pub db_url: String,
     pub search_category: String,
     pub num_workers: Option<usize>,
 }
@@ -49,6 +50,7 @@ pub struct GraphTask {
 impl Default for GraphTask {
     fn default() -> Self {
         GraphTask {
+            db_url: "".to_string(),
             search_category: "Category:Graphs_to_Port".to_string(),
             num_workers: None,
         }

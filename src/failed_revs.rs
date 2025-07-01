@@ -2,13 +2,16 @@ use sea_orm::{
     ActiveModelTrait, ActiveValue, Database, DatabaseConnection, EntityTrait, IntoActiveModel,
 };
 use sea_orm::sqlx::types::chrono;
+use tokio::sync::RwLock;
+use crate::config::Config;
 use crate::rev_info::RevInfo;
 
 pub struct FailedRevs(DatabaseConnection);
 
 impl FailedRevs {
-    pub async fn load() -> anyhow::Result<Self> {
-        let db = Database::connect("sqlite://db/graph.db").await?;
+    pub async fn load(config: &RwLock<Config>) -> anyhow::Result<Self> {
+        let url = config.read().await.graph_task.db_url.clone();
+        let db = Database::connect(&url).await?;
         Ok(Self(db))
     }
 

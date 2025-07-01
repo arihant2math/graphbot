@@ -120,6 +120,15 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     });
+    let report_graph_errors_task = task::spawn({
+        let wiki_bot = Arc::clone(&wiki_bot);
+        let config = Arc::clone(&config);
+        async move {
+            if let Err(e) = report_graph_errors_task::report_graph_errors_task(wiki_bot, config).await {
+                error!("Report graph errors task failed: {e}");
+            }
+        }
+    });
     let rfd_task = task::spawn({
         let wiki_bot = Arc::clone(&wiki_bot);
         let config = Arc::clone(&config);
@@ -149,6 +158,6 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
     });
-    let _ = join!(graph_task, rfd_task, shutdown_task);
+    let _ = join!(graph_task, report_graph_errors_task, rfd_task, shutdown_task);
     Ok(())
 }

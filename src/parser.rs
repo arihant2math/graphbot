@@ -407,6 +407,11 @@ macro_rules! as_part {
                         None
                     }
                 }
+
+                #[allow(unused)]
+                pub fn [<is_ $name>](&self) -> bool {
+                    matches!(self.inner, NodeInner::$variant(_))
+                }
             }
         }
     };
@@ -439,6 +444,7 @@ pub struct Wikitext {
     pub nodes: Vec<GenericNode>,
     pub text: String,
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OutRoot {
     pub parsed: Wikitext,

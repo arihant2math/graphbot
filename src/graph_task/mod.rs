@@ -1,13 +1,11 @@
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context, bail};
 use convert::gen_graph_chart;
-use graphbot_db::prelude::GraphFailedConversions;
 use mwbot::{
     Bot, Page, SaveOptions,
     generators::{CategoryMemberSort, CategoryMembers, Generator},
 };
-use sea_orm::{ConnectionTrait, Database, Schema};
 use tokio::{
     sync::{Mutex, RwLock, mpsc, mpsc::Receiver, oneshot, oneshot::Sender},
     task,
@@ -338,7 +336,7 @@ pub async fn graph_task(
     // check for parser load
     // if parsing nothing fails, it must be not running or very broken
     if let Err(e) = call_parser("", &config).await {
-        error!("Parser failed to parse empty string, are you sure it is running? {e}");
+        error!("Parser failed to parse empty string, are you sure the server is running? {e}");
         return Err(e);
     }
 

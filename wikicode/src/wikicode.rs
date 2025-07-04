@@ -11,10 +11,17 @@ use crate::{
     utils::parse_anything,
 };
 
-pub const FLAGS: regex::RegexBuilder = *regex::RegexBuilder::new("")
-    .case_insensitive(true)
-    .dot_matches_new_line(true)
-    .unicode(true);
+use paste::paste;
+use regex::Regex;
+
+pub fn flags() -> Regex {
+    regex::RegexBuilder::new("")
+        .case_insensitive(true)
+        .dot_matches_new_line(true)
+        .unicode(true)
+        .build()
+        .unwrap()
+}
 
 #[derive(Clone, Debug)]
 pub struct Wikicode {
@@ -158,15 +165,17 @@ impl fmt::Display for Wikicode {
 // Macro for filter methods for node types
 macro_rules! build_filter_methods {
     ($($name:ident => $ty:ty),*) => {
-        impl Wikicode {
-            $(
-                pub fn ifilter_$name(&self) -> Vec<&Box<dyn Node>> {
-                    self.filter(|n| n.as_any().is::<$ty>())
-                }
-                pub fn filter_$name(&self) -> Vec<&Box<dyn Node>> {
-                    self.filter(|n| n.as_any().is::<$ty>())
-                }
-            )*
+        paste! {
+            impl Wikicode {
+                $(
+                    pub fn [<ifilter_ $name>](&self) -> Vec<&Box<dyn Node>> {
+                        self.filter(|n| n.as_any().is::<$ty>())
+                    }
+                    pub fn [<filter_ $name>](&self) -> Vec<&Box<dyn Node>> {
+                        self.filter(|n| n.as_any().is::<$ty>())
+                    }
+                )*
+            }
         }
     };
 }

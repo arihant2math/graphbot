@@ -46,6 +46,6 @@ impl dyn Node {
 
     /// Downcast to a specific type if possible, consuming self.
     pub fn downcast<T: Node>(self: Box<Self>) -> Result<Box<T>, Box<dyn Node>> {
-        self.as_any().downcast::<T>().map_err(|e| e)
+        self.downcast::<T>().map_err(|e| e)
     }
 }

@@ -20,7 +20,7 @@ pub struct Template {
 impl Template {
     pub fn new<N: Into<Wikicode>>(name: N, params: Option<Vec<Parameter>>) -> Self {
         Template {
-            name: parse_anything(name),
+            name: parse_anything(name, 0, false),
             params: params.unwrap_or_default(),
         }
     }
@@ -30,7 +30,7 @@ impl Template {
     }
 
     pub fn set_name<V: Into<Wikicode>>(&mut self, value: V) {
-        self.name = parse_anything(value);
+        self.name = parse_anything(value, 0, false);
     }
 
     pub fn params(&self) -> &Vec<Parameter> {
@@ -102,7 +102,7 @@ impl Template {
 
     /// Escape a single character in all text nodes of `code`.
     fn surface_escape(code: &Wikicode, ch: char) {
-        let repl = HTMLEntity::new(repr!(ch as u32)).to_string();
+        let repl = HTMLEntity::new(ch as u32, None, false, 'x').to_string();
         unimplemented!("surface_escape requires `filter_text` and `replace` on Wikicode");
     }
 
@@ -181,7 +181,7 @@ impl Template {
         if self.params[idx].showkey() {
             let following = &self.params[idx + 1..];
             following.iter().any(|after| {
-                after.name().strip_code(true, true, true).as_deref() == Some(name)
+                after.name().strip_code(true, true, true).as_ref() == Some(name)
                     && !after.showkey()
             })
         } else {
@@ -192,11 +192,11 @@ impl Template {
     pub fn has(&self, name: &str, ignore_empty: bool) -> bool {
         let key = name.trim();
         for p in &self.params {
-            if p.name().strip_code(true, true, true).as_deref() == Some(key) {
+            if p.name().strip_code(true, true, true).as_ref() == Some(key) {
                 if ignore_empty
                     && p.value()
                         .strip_code(true, true, true)
-                        .map_or(true, |s| s.is_empty())
+                        .is_empty()
                 {
                     continue;
                 }
@@ -211,7 +211,7 @@ impl Template {
         self.params
             .iter()
             .rev()
-            .find(|p| p.name().strip_code(true, true, true).as_deref() == Some(key))
+            .find(|p| p.name().strip_code(true, true, true).as_ref() == Some(key))
     }
 
     pub fn add(
@@ -223,8 +223,8 @@ impl Template {
         after: Option<&Parameter>,
         preserve_spacing: bool,
     ) -> &mut Parameter {
-        let name_wc = parse_anything(name);
-        let mut value_wc = parse_anything(value);
+        let name_wc = parse_anything(name, 0, false);
+        let mut value_wc = parse_anything(value, 0, false);
         Self::surface_escape(&value_wc, '|');
 
         if let Some(existing) = self.get(&*name_wc.as_str()) {

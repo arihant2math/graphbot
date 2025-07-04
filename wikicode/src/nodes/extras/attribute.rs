@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::{string_mixin::StringMixIn, utils::parse_anything, wikicode::Wikicode};
+use crate::{utils::parse_anything, wikicode::Wikicode};
 
 #[derive(Clone, Debug)]
 pub struct Attribute {
@@ -22,7 +22,7 @@ impl Attribute {
         pad_after_eq: &str,
     ) -> Self {
         let mut attr = Attribute {
-            name: parse_anything(name),
+            name: parse_anything(name, 0, false),
             value: None,
             quotes: None,
             pad_first: pad_first.to_string(),
@@ -39,7 +39,7 @@ impl Attribute {
     }
 
     pub fn set_name(&mut self, value: impl Into<Wikicode>) {
-        self.name = parse_anything(value);
+        self.name = parse_anything(value, 0, false);
     }
 
     pub fn value(&self) -> Option<&Wikicode> {
@@ -47,7 +47,7 @@ impl Attribute {
     }
 
     pub fn set_value(&mut self, value: impl Into<Wikicode>) {
-        let code = parse_anything(value);
+        let code = parse_anything(value, 0, false);
         let quotes = Self::value_needs_quotes(&code);
         if let Some(qs) = &quotes {
             if self.quotes.is_none() || !qs.contains(self.quotes.as_ref().unwrap()) {
@@ -139,7 +139,9 @@ impl Attribute {
             return None;
         }
         let val = value
-            .filter_text(false)
+            // TODO: investigate why false is needed here
+            // .filter_text(false)
+            .filter_text()
             .iter()
             .map(|n| n.as_str())
             .collect::<String>();

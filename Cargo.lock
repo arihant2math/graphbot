@@ -1053,7 +1053,6 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "url 2.5.4",
  "xml-rpc",
 ]
 

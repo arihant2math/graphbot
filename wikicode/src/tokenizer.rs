@@ -403,6 +403,10 @@ impl Tokenizer {
                     Err(_) => self.emit_text_then_stack("{".repeat(braces as usize)),
                 },
             }
+            if braces != 0 {
+                has_content = true;
+                self.head += 1;
+            }
         }
 
         let tmp = self.pop(None);

@@ -1366,7 +1366,7 @@ impl Tokenizer {
             ";".to_string(),
             ":".to_string(),
         ];
-        while !matchers.contains(&self.read(Some(1), None)?.unwrap_left()) {
+        while matchers.contains(&self.read(Some(1), None)?.unwrap_left()) {
             self.head += 1;
             self.handle_list_marker()?;
         }

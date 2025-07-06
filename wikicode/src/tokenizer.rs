@@ -88,7 +88,7 @@ bitflags::bitflags! {
 struct TagOpenData {
     pub context: TagOpenDataContext,
     pub padding_buffer: HashMap<String, String>,
-    pub quoter: Option<()>,
+    pub quoter: Option<String>,
     pub reset: i64,
 }
 
@@ -1085,6 +1085,27 @@ impl Tokenizer {
     }
 
     // TODO: push_tag_buffer()
+    fn push_tag_buffer(&mut self, data: &mut TagOpenData) {
+        if data.context & TagOpenDataContext::CX_QUOTED != 0 {
+            let mut tmp = Token::tag_attr_quote();
+            tmp.insert("char".to_string(), Value::String(data.quoter.unwrap()));
+            self.emit_first(tmp);
+            let tmp = self.pop(None);
+            self.emit_all(tmp);
+        }
+        let buf = data.padding_buffer;
+        let mut tmp = Token::tag_attr_start();
+        tmp.insert("pad_first".to_string(), Value::String(buf.get("first").unwrap().to_string()));
+        tmp.insert("pad_before_eq".to_string(), Value::String(buf.get("before_eq").unwrap().to_string()));
+        tmp.insert("pad_after_eq".to_string(), Value::String(buf.get("after_eq").unwrap().to_string()));
+        self.emit_first(tmp);
+        let tmp = self.pop(None);
+        self.emit_all(tmp);
+        data.padding_buffer.iter_mut().for_each(|(k, v)| {
+            v.clear();
+        });
+    }
+
     // TODO: handle_tag_space()
     fn handle_tag_text(&mut self, text: String) -> Result<(), TokenizerError> {
         let nxt = self.read(Some(1), None)?;
@@ -1471,7 +1492,6 @@ impl Tokenizer {
     }
 
     // TOOD: emit_table_tag
-    // TODO: handle_table_style
     fn handle_table_style(&mut self, end_token: &str) -> Result<(), TokenizerError> {
         // TODO: Finish
         todo!();
@@ -1482,7 +1502,7 @@ impl Tokenizer {
         self.head += 2;
         let padding = match self.push(Some(contexts::TABLE_OPEN)) {
             Ok(_) => self.handle_table_style("\n")?,
-            Err(TokenizerError::BadRoute(_)) => {
+            Err(BadRoute(_)) => {
                 self.head = reset;
                 self.emit_text("{|".to_string());
                 return Ok(());
@@ -1518,8 +1538,7 @@ impl Tokenizer {
         if reset_for_style {
             *self.context_mut() |= contexts::TABLE_CELL_STYLE;
         } else {
-            todo!();
-            // *self.context_mut() &= ~contexts::TABLE_CELL_STYLE;
+            *self.context_mut() &= !contexts::TABLE_CELL_STYLE;
         }
         self.pop(Some(true))
     }
@@ -1878,9 +1897,7 @@ impl Tokenizer {
                     } else if this.clone().unwrap_left() == "|"
                         && self.context() & contexts::TABLE_CELL_STYLE != 0
                     {
-                        unimplemented!();
-                        // TODO: fix
-                        // return Ok(self.handle_table_cell_end_with_style()?);
+                        return Ok(self.handle_table_cell_end(Some(true)));
                     } else if this.clone().unwrap_left() == "\n"
                         && self.context() & contexts::TABLE_CELL_LINE_CONTEXTS != 0
                     {

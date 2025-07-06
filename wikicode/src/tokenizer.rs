@@ -62,6 +62,7 @@ impl TokenizerError {
     }
 }
 
+#[derive(Debug)]
 struct Stack {
     pub first: Vec<Token>,
     pub second: u64,
@@ -142,7 +143,7 @@ pub struct Tokenizer {
     skip_style_tags: bool,
 }
 impl Tokenizer {
-    fn regex() -> regex::Regex {
+    fn regex() -> Regex {
         let pattern = r#"([{}\[\]<>|=&'#*;:/\\\"\-!\n])"#;
         regex::RegexBuilder::new(pattern)
             .case_insensitive(true)
@@ -390,11 +391,15 @@ impl Tokenizer {
             }
             if braces == 2 {
                 match self.parse_template(has_content) {
-                    Err(_) => {
+                    Err(TokenizerError::BadRoute(_)) => {
                         self.emit_text_then_stack("{{".to_string());
                     }
-                    _ => {}
+                    Err(e) => {
+                        return Err(e);
+                    }
+                    Ok(_) => {}
                 }
+                break;
             }
             match self.parse_argument() {
                 Ok(_) => {
@@ -1303,7 +1308,9 @@ impl Tokenizer {
 
     /// Handle the end of the stream of wikitext
     fn handle_end(&mut self) -> Result<Vec<Token>, TokenizerError> {
+        dbg!(self.stacks.len());
         if self.context() & contexts::FAIL != 0 {
+            dbg!();
             if self.context() & contexts::TAG_BODY != 0 {
                 if definitions::is_single(
                     &*self.stack()[1]

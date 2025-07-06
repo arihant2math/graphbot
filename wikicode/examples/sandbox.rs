@@ -1,5 +1,5 @@
 fn main() {
-    let input = "== Test ==".to_string();
+    let input = "{{test}}".to_string();
     // parse the input
     println!("Parsing input:\n{}", input);
     match wikicode::parse(&input) {

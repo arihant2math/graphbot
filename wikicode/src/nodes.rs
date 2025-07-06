@@ -1,210 +1,113 @@
-use std::{
-    fmt::Debug,
-    ops::{Deref, DerefMut},
-};
+use std::fmt::Debug;
 
-use serde::{Deserialize, Serialize};
+pub trait Node: Debug {}
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NodeInnerAttribute {
-    pad_after_eq: String,
-    pad_before_eq: String,
-    pad_first: String,
-    quotes: Option<String>,
-    value: Option<Wikicode>,
+#[derive(Debug)]
+pub struct AttributeNode {
+    pub pad_after_eq: String,
+    pub pad_before_eq: String,
+    pub pad_first: String,
+    pub quotes: Option<String>,
+    pub value: Option<Wikicode>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NodeInnerParameter {
+impl Node for AttributeNode {}
+
+#[derive(Debug)]
+pub struct ParameterNode {
     pub key: Wikicode,
     pub showkey: bool,
     pub value: Option<Wikicode>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NodeInnerArgument {
-    name: Wikicode,
-    default: Option<Wikicode>,
+impl Node for ParameterNode {}
+
+#[derive(Debug)]
+pub struct ArgumentNode {
+    pub name: Wikicode,
+    pub default: Option<Wikicode>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NodeInnerComment {
+impl Node for ArgumentNode {}
+
+#[derive(Debug)]
+pub struct CommentNode {
     pub contents: Wikicode,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NodeInnerExternalLink {
-    pub(crate) brackets: String,
-    pub(crate) suppress_space: bool,
-    pub(crate) title: Option<Wikicode>,
-    pub(crate) url: Wikicode,
+impl Node for CommentNode {}
+
+#[derive(Debug)]
+pub struct ExternalLinkNode {
+    pub brackets: String,
+    pub suppress_space: bool,
+    pub title: Option<Wikicode>,
+    pub url: Wikicode,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NodeInnerHTMLEntity {
-    hex_char: String,
-    hexadecimal: bool,
-    named: bool,
-    value: String,
+impl Node for ExternalLinkNode {}
+
+#[derive(Debug)]
+pub struct HTMLEntityNode {
+    pub hex_char: String,
+    pub hexadecimal: bool,
+    pub named: bool,
+    pub value: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NodeInnerHeading {
+impl Node for HTMLEntityNode {}
+
+#[derive(Debug)]
+pub struct HeadingNode {
     pub level: u8,
     pub title: Wikicode,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NodeInnerTag {
-    attributes: Vec<Node<NodeInnerAttribute>>,
-    closing_tag: Option<String>,
-    closing_wiki_markup: Option<String>,
-    contents: Wikicode,
-    implicit: bool,
-    invalid: bool,
-    padding: String,
-    self_closing: bool,
-    tag: Option<String>,
-    wiki_markup: Option<String>,
-    wiki_style_separator: Option<String>,
+impl Node for HeadingNode {}
+
+#[derive(Debug)]
+pub struct TagNode {
+    pub attributes: Vec<AttributeNode>,
+    pub closing_tag: Option<String>,
+    pub closing_wiki_markup: Option<String>,
+    pub contents: Wikicode,
+    pub implicit: bool,
+    pub invalid: bool,
+    pub padding: String,
+    pub self_closing: bool,
+    pub tag: Option<String>,
+    pub wiki_markup: Option<String>,
+    pub wiki_style_separator: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NodeInnerTemplate {
+impl Node for TagNode {}
+
+#[derive(Debug)]
+pub struct TemplateNode {
     pub name: Wikicode,
-    pub params: Vec<Node<NodeInnerParameter>>,
+    pub params: Vec<ParameterNode>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NodeInnerText {
-    pub(crate) value: String,
+impl Node for TemplateNode {}
+
+#[derive(Clone, Debug)]
+pub struct TextNode {
+    pub value: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NodeInnerWikilink {
-    // TODO: somehow rename/fix this
-    #[serde(rename = "txt")]
+impl Node for TextNode {}
+
+#[derive(Debug)]
+pub struct WikilinkNode {
     pub text: Option<Wikicode>,
     pub title: Wikicode,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Node<I>
-where
-    I: Clone + Debug,
-{
-    #[serde(flatten)]
-    pub(crate) inner: I,
-}
+impl Node for WikilinkNode {}
 
-impl<T> Deref for Node<T>
-where
-    T: Clone + Debug,
-{
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl<T> DerefMut for Node<T>
-where
-    T: Clone + Debug,
-{
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.inner
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum NodeInner {
-    Attribute(NodeInnerAttribute),
-    Parameter(NodeInnerParameter),
-    Argument(NodeInnerArgument),
-    Comment(NodeInnerComment),
-    ExternalLink(NodeInnerExternalLink),
-    Heading(NodeInnerHeading),
-    HTMLEntity(NodeInnerHTMLEntity),
-    Tag(NodeInnerTag),
-    Template(NodeInnerTemplate),
-    Text(NodeInnerText),
-    Wikilink(NodeInnerWikilink),
-}
-
-use paste::paste;
-
-macro_rules! as_part {
-    ($name:ident, $variant:ident, $st:ident) => {
-        paste! {
-            impl NodeInner {
-                #[allow(unused)]
-                pub fn [<as_ $name>](&self) -> Option<&$st> {
-                    if let NodeInner::$variant(inner) = self {
-                        Some(inner)
-                    } else {
-                        None
-                    }
-                }
-
-                #[allow(unused)]
-                pub fn [<into_ $name>](self) -> Option<$st> {
-                    if let NodeInner::$variant(inner) = self {
-                        Some(inner)
-                    } else {
-                        None
-                    }
-                }
-
-                #[allow(unused)]
-                pub fn [<is_ $name>](&self) -> bool {
-                    matches!(self, NodeInner::$variant(_))
-                }
-            }
-
-            impl GenericNode {
-                #[allow(unused)]
-                pub fn [<into_ $name>](self) -> Option<Node<$st>> {
-                    if let NodeInner::$variant(inner) = self.inner {
-                        Some(Node {
-                            inner,
-                        })
-                    } else {
-                        None
-                    }
-                }
-
-                #[allow(unused)]
-                pub fn [<is_ $name>](&self) -> bool {
-                    matches!(self.inner, NodeInner::$variant(_))
-                }
-            }
-        }
-    };
-}
-
-as_part!(attribute, Attribute, NodeInnerAttribute);
-as_part!(parameter, Parameter, NodeInnerParameter);
-as_part!(argument, Argument, NodeInnerArgument);
-as_part!(comment, Comment, NodeInnerComment);
-as_part!(external_link, ExternalLink, NodeInnerExternalLink);
-as_part!(heading, Heading, NodeInnerHeading);
-as_part!(html_entity, HTMLEntity, NodeInnerHTMLEntity);
-as_part!(tag, Tag, NodeInnerTag);
-as_part!(template, Template, NodeInnerTemplate);
-as_part!(text, Text, NodeInnerText);
-as_part!(wikilink, Wikilink, NodeInnerWikilink);
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GenericNode {
-    #[serde(flatten)]
-    pub inner: NodeInner,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct Wikicode {
-    pub nodes: Vec<GenericNode>,
+    pub nodes: Vec<Box<dyn Node>>,
 }
 
 impl Wikicode {
@@ -212,7 +115,7 @@ impl Wikicode {
         Wikicode { nodes: Vec::new() }
     }
 
-    pub fn from_nodes(nodes: Vec<GenericNode>) -> Self {
+    pub fn from_nodes(nodes: Vec<Box<dyn Node>>) -> Self {
         Wikicode { nodes }
     }
 }

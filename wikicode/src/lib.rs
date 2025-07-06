@@ -41,7 +41,11 @@ mod tests {
         ];
         for input in inputs {
             let result = parse(input);
-            assert!(result.is_ok(), "Failed to parse input: {} because {result:?}", input);
+            assert!(
+                result.is_ok(),
+                "Failed to parse input: {} because {result:?}",
+                input
+            );
             let wikicode = result.unwrap();
             assert!(
                 !wikicode.nodes.is_empty(),

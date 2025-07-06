@@ -1,8 +1,8 @@
 use crate::{
     nodes,
     nodes::{
-        GenericNode, Node, NodeInner, NodeInnerExternalLink, NodeInnerParameter, NodeInnerText,
-        NodeInnerWikilink, Wikicode,
+        CommentNode, ExternalLinkNode, HeadingNode, Node, ParameterNode, TemplateNode, TextNode,
+        Wikicode, WikilinkNode,
     },
     tokens::{Token, TokenType},
 };
@@ -28,7 +28,7 @@ impl std::fmt::Display for BuilderError {
 
 pub struct Builder {
     tokens: Vec<Token>,
-    stacks: Vec<Vec<GenericNode>>,
+    stacks: Vec<Vec<Box<dyn Node>>>,
 }
 
 macro_rules! handle_and_write {
@@ -59,7 +59,7 @@ impl Builder {
         }
     }
 
-    fn write(&mut self, item: GenericNode) {
+    fn write(&mut self, item: Box<dyn Node>) {
         if let Some(stack) = self.stacks.last_mut() {
             stack.push(item);
         } else {
@@ -67,10 +67,7 @@ impl Builder {
         }
     }
 
-    fn handle_parameter(
-        &mut self,
-        default: String,
-    ) -> Result<Node<NodeInnerParameter>, BuilderError> {
+    fn handle_parameter(&mut self, default: String) -> Result<ParameterNode, BuilderError> {
         let mut key = None;
         let mut showkey = false;
         self.push();
@@ -83,16 +80,14 @@ impl Builder {
                 self.tokens.push(token);
                 let value = Some(self.pop());
                 if key.is_none() {
-                    key = Some(Wikicode::from_nodes(vec![GenericNode {
-                        inner: NodeInner::Text(NodeInnerText { value: default }),
-                    }]))
+                    key = Some(Wikicode::from_nodes(vec![Box::new(TextNode {
+                        value: default,
+                    })]));
                 }
-                return Ok(Node {
-                    inner: NodeInnerParameter {
-                        key: key.unwrap(),
-                        showkey,
-                        value,
-                    },
+                return Ok(ParameterNode {
+                    key: key.unwrap(),
+                    showkey,
+                    value,
                 });
             }
         }
@@ -101,13 +96,11 @@ impl Builder {
         ))
     }
 
-    fn handle_token(&mut self, token: Token) -> Result<GenericNode, BuilderError> {
+    fn handle_token(&mut self, token: Token) -> Result<Box<dyn Node>, BuilderError> {
         match token.token_type {
-            TokenType::Text => Ok(GenericNode {
-                inner: NodeInner::Text(NodeInnerText {
-                    value: token.get("text").unwrap().clone().unwrap_string(),
-                }),
-            }),
+            TokenType::Text => Ok(Box::new(TextNode {
+                value: token.get("text").unwrap().clone().unwrap_string(),
+            })),
             TokenType::TemplateOpen => {
                 let mut name = None;
                 let mut params = Vec::new();
@@ -128,9 +121,7 @@ impl Builder {
                             name = Some(self.pop());
                         }
                         let name = name.unwrap();
-                        return Ok(GenericNode {
-                            inner: NodeInner::Template(nodes::NodeInnerTemplate { name, params }),
-                        });
+                        return Ok(Box::new(TemplateNode { name, params }));
                     } else {
                         handle_and_write!(self, token);
                     }
@@ -155,19 +146,15 @@ impl Builder {
                         self.push()
                     } else if matches!(token.token_type, TokenType::WikilinkClose) {
                         if !title.is_none() {
-                            return Ok(GenericNode {
-                                inner: NodeInner::Wikilink(NodeInnerWikilink {
-                                    title: title.unwrap(),
-                                    text: Some(self.pop()),
-                                }),
-                            });
+                            return Ok(Box::new(WikilinkNode {
+                                title: title.unwrap(),
+                                text: Some(self.pop()),
+                            }));
                         }
-                        return Ok(GenericNode {
-                            inner: NodeInner::Wikilink(NodeInnerWikilink {
-                                title: nodes::Wikicode { nodes: Vec::new() },
-                                text: None,
-                            }),
-                        });
+                        return Ok(Box::new(WikilinkNode {
+                            title: nodes::Wikicode { nodes: Vec::new() },
+                            text: None,
+                        }));
                     } else {
                         handle_and_write!(self, token);
                     }
@@ -189,23 +176,19 @@ impl Builder {
                         self.push();
                     } else if matches!(token.token_type, TokenType::ExternalLinkClose) {
                         if let Some(url) = url {
-                            return Ok(GenericNode {
-                                inner: NodeInner::ExternalLink(NodeInnerExternalLink {
-                                    url: url,
-                                    title: Some(self.pop()),
-                                    brackets,
-                                    suppress_space: suppress_space.is_some(),
-                                }),
-                            });
-                        }
-                        return Ok(GenericNode {
-                            inner: NodeInner::ExternalLink(NodeInnerExternalLink {
-                                url: self.pop(),
-                                title: None,
+                            return Ok(Box::new(ExternalLinkNode {
+                                url: url,
+                                title: Some(self.pop()),
                                 brackets,
                                 suppress_space: suppress_space.is_some(),
-                            }),
-                        });
+                            }));
+                        }
+                        return Ok(Box::new(ExternalLinkNode {
+                            url: self.pop(),
+                            title: None,
+                            brackets,
+                            suppress_space: suppress_space.is_some(),
+                        }));
                     } else {
                         handle_and_write!(self, token);
                     }
@@ -221,9 +204,7 @@ impl Builder {
                 while let Some(token) = self.tokens.pop() {
                     if matches!(token.token_type, TokenType::HeadingEnd) {
                         let title = self.pop();
-                        return Ok(GenericNode {
-                            inner: NodeInner::Heading(nodes::NodeInnerHeading { level, title }),
-                        });
+                        return Ok(Box::new(HeadingNode { level, title }));
                     }
                     handle_and_write!(self, token);
                 }
@@ -233,11 +214,9 @@ impl Builder {
                 self.push();
                 while let Some(token) = self.tokens.pop() {
                     if matches!(token.token_type, TokenType::CommentEnd) {
-                        return Ok(GenericNode {
-                            inner: NodeInner::Comment(nodes::NodeInnerComment {
-                                contents: self.pop(),
-                            }),
-                        });
+                        return Ok(Box::new(CommentNode {
+                            contents: self.pop(),
+                        }));
                     }
                     handle_and_write!(self, token);
                 }

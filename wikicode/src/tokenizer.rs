@@ -12,6 +12,7 @@ use crate::{
     definitions::get_html_tag,
     tokens::{Token, TokenType, Value},
 };
+use crate::tokenizer::TokenizerError::BadRoute;
 
 fn split_with_captures<'t>(re: &Regex, text: &'t str) -> Vec<&'t str> {
     let mut pieces = Vec::new();
@@ -946,20 +947,86 @@ impl Tokenizer {
                 self.emit_all(after);
                 Ok((self.pop(None), level))
             }
-            Err(_) => {
+            Err(BadRoute(_)) => {
                 if level < best as usize {
                     self.emit_text("=".repeat(best as usize - level));
                 }
                 self.head = reset + best - 1;
                 Ok((self.pop(None), level))
             }
+            Err(e) => {
+                Err(e)
+            }
         }
     }
 
-    // TODO: really_parse_entity()
     fn really_parse_entity(&mut self) -> Result<(), TokenizerError> {
-        // TODO: fix
-        todo!();
+        self.emit(Token::html_entity_start());
+        self.head += 1;
+
+        let mut this = self.read(None, Some(true))?.unwrap_left();
+        let (numeric, hexadecimal) = if &this == "#" {
+            self.emit(Token::html_entity_numeric());
+            self.head += 1;
+            this = self.read(None, Some(true))?.unwrap_left();
+            if this.chars().next().unwrap() == 'x' {
+                let mut tmp = Token::html_entity_hex();
+                tmp.insert(
+                    "char".to_lowercase(),
+                    Value::String(this.chars().next().unwrap().to_string()),
+                );
+                self.emit(tmp);
+                this = this[1..].to_string();
+                if this.is_empty() {
+                    return Err(self.fail_route());
+                }
+                (true, true)
+            } else {
+                (true, false)
+            }
+        } else {
+            (false, false)
+        };
+
+        let mut valid = if hexadecimal {
+            "0123456789abcdefABCDEF"
+        } else {
+            "0123456789"
+        }
+        .to_string();
+        if !numeric && !hexadecimal {
+            valid += "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        }
+        if this.chars().into_iter().any(|c| !valid.contains(c)) {
+            return Err(self.fail_route());
+        }
+
+        self.head += 1;
+        if self.read(None, None)? != Either::Left(";".to_string()) {
+            return Err(self.fail_route());
+        }
+        if numeric {
+            let test = if hexadecimal {
+                i64::from_str_radix(&this, 16)
+            } else {
+                i64::from_str_radix(&this, 10)
+            }
+            .unwrap();
+            if test < 1 || test > 0x10FFFF {
+                return Err(self.fail_route());
+            }
+        } else {
+            // TODO: not correct
+            // if this not in html.entities.entitydefs:
+            //     self._fail_route()
+            return Err(self.fail_route());
+        }
+
+        let mut text = Token::text();
+        text.insert("text".to_string(), Value::String(this));
+        self.emit(text);
+        self.emit(Token::html_entity_end());
+        Ok(())
     }
 
     fn parse_entity(&mut self) -> Result<(), TokenizerError> {
@@ -1405,7 +1472,28 @@ impl Tokenizer {
 
     // TOOD: emit_table_tag
     // TODO: handle_table_style
+    fn handle_table_style(&mut self, end_token: &str) -> Result<(), TokenizerError> {
+        // TODO: Finish
+        todo!();
+    }
+
     fn parse_table(&mut self) -> Result<(), TokenizerError> {
+        let reset = self.head;
+        self.head += 2;
+        let padding = match self.push(Some(contexts::TABLE_OPEN)) {
+            Ok(_) => self.handle_table_style("\n")?,
+            Err(TokenizerError::BadRoute(_)) => {
+                self.head = reset;
+                self.emit_text("{|".to_string());
+                return Ok(());
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        };
+
+        self.head += 1;
+        let restore_point = self.stack_ident();
         // TODO: Finish
         todo!()
     }
@@ -1635,7 +1723,7 @@ impl Tokenizer {
                             Either::Right(Sentinel::Start),
                         ]
                         .contains(&self.read(Some(-1), None)?)
-                        && nxt.unwrap_left() == "="
+                        && nxt == Either::Left("=".to_string())
                     {
                         self.parse_heading()?;
                     } else {

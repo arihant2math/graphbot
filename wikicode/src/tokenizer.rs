@@ -499,7 +499,7 @@ impl Tokenizer {
                 self.head = reset + 1;
                 match self.parse(Some(contexts::WIKILINK_TITLE), None) {
                     Ok(wikilink) => {
-                        self.emit_first(Token::wikilink_open());
+                        self.emit(Token::wikilink_open());
                         self.emit_all(wikilink);
                         self.emit(Token::wikilink_close());
                     }
@@ -1162,7 +1162,7 @@ impl Tokenizer {
         Ok(())
     }
 
-    fn parse_style(&mut self) -> Result<Vec<Token>, TokenizerError> {
+    fn parse_style(&mut self) -> Result<Option<Vec<Token>>, TokenizerError> {
         self.head += 2;
         let mut ticks = 2;
         while self.read(None, None)? == Either::Left("'".to_string()) {
@@ -1184,13 +1184,13 @@ impl Tokenizer {
             if ticks == 5 {
                 self.head -= if italics { 3 } else { 2 };
             }
-            return Ok(self.pop(None));
+            return Ok(Some(self.pop(None)));
         }
         if !self.can_recurse() {
             if ticks == 3 {
                 if self.context() & contexts::STYLE_SECOND_PASS != 0 {
                     self.emit_text("'".to_string());
-                    return Ok(self.pop(None));
+                    return Ok(Some(self.pop(None)));
                 }
                 if self.context() & contexts::STYLE_ITALICS != 0 {
                     *self.context_mut() |= contexts::STYLE_PASS_AGAIN;
@@ -1201,13 +1201,13 @@ impl Tokenizer {
             self.parse_italics()?;
         } else if ticks == 3 {
             if self.parse_bold()? {
-                return Ok(self.pop(None));
+                return Ok(Some(self.pop(None)));
             }
         } else {
             self.parse_italics_and_bold()?;
         }
         self.head -= 1;
-        Ok(Vec::new())
+        Ok(None)
     }
 
     /// Handle a list marker at the head (``#``, ``*``, ``;``, ``:``).
@@ -1308,9 +1308,7 @@ impl Tokenizer {
 
     /// Handle the end of the stream of wikitext
     fn handle_end(&mut self) -> Result<Vec<Token>, TokenizerError> {
-        dbg!(self.stacks.len());
         if self.context() & contexts::FAIL != 0 {
-            dbg!();
             if self.context() & contexts::TAG_BODY != 0 {
                 if definitions::is_single(
                     &*self.stack()[1]
@@ -1581,7 +1579,7 @@ impl Tokenizer {
                     return Ok(self.handle_tag_close_close());
                 }
                 "'" if this == nxt && !self.skip_style_tags => {
-                    if let Ok(result) = self.parse_style() {
+                    if let Some(result) = self.parse_style()? {
                         return Ok(result);
                     }
                 }

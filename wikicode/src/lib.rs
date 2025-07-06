@@ -5,6 +5,11 @@ pub mod nodes;
 mod tokenizer;
 mod tokens;
 
+pub fn tokenize(input: String) -> Result<Vec<tokens::Token>, tokenizer::TokenizerError> {
+    let mut tokenizer = tokenizer::Tokenizer::new();
+    tokenizer.tokenize(input, 0, false)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ParserError {
     #[error("Tokenization error: {0}")]

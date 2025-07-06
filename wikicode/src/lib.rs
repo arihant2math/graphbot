@@ -16,7 +16,6 @@ pub enum ParserError {
 pub fn parse(input: &str) -> Result<nodes::Wikicode, ParserError> {
     let mut tokenizer = tokenizer::Tokenizer::new();
     let tokens = tokenizer.tokenize(input.to_string(), 0, false)?;
-    dbg!(&tokens);
     let mut builder = builder::Builder::new();
     Ok(builder.build(tokens)?)
 }

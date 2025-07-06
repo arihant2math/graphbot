@@ -1,13 +1,39 @@
 use std::collections::HashSet;
 use std::fmt::Display;
 use either::Either;
-
+use regex::Regex;
 use crate::{
     contexts, definitions,
     definitions::get_html_tag,
     tokens,
     tokens::{Token, TokenType, Value},
 };
+
+fn split_with_captures<'t>(re: &Regex, text: &'t str) -> Vec<&'t str> {
+    let mut pieces = Vec::new();
+    let mut last_end = 0;
+
+    for caps in re.captures_iter(text) {
+        // caps.get(0) is the full match
+        let mat = caps.get(0).unwrap();
+        // 1) push the text before this match
+        pieces.push(&text[last_end..mat.start()]);
+
+        // 2) push each capturing‐group’s text
+        //    (skip cap[0], which is the full match)
+        for i in 1..caps.len() {
+            if let Some(group) = caps.get(i) {
+                pieces.push(group.as_str());
+            }
+        }
+
+        last_end = mat.end();
+    }
+
+    // 3) finally push the trailing text after the last match
+    pieces.push(&text[last_end..]);
+    pieces
+}
 
 #[derive(Copy, Clone, Debug, thiserror::Error)]
 pub enum TokenizerError {
@@ -118,7 +144,8 @@ pub struct Tokenizer {
 }
 impl Tokenizer {
     fn regex() -> regex::Regex {
-        regex::RegexBuilder::new(r#"([{}\[\]<>|=&'#*;:/\\"\-!\n])"#)
+        let pattern = r#"([{}\[\]<>|=&'#*;:/\\\"\-!\n])"#;
+        regex::RegexBuilder::new(pattern)
             .case_insensitive(true)
             .build()
             .unwrap()
@@ -1629,8 +1656,8 @@ impl Tokenizer {
         skip_style_tags: bool,
     ) -> Result<Vec<Token>, TokenizerError> {
         // Build a list of tokens from a string of wikicode and return it.
-        let split: Vec<String> = Self::regex()
-            .split(&text)
+        let split: Vec<_> = split_with_captures(&Self::regex(), &text)
+            .into_iter()
             .filter(|segment| !segment.is_empty())
             .map(String::from)
             .collect();

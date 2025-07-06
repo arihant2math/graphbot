@@ -1,15 +1,31 @@
 use std::collections::HashSet;
+use std::fmt::Display;
 use either::Either;
-use crate::{contexts, definitions, tokens};
-use crate::definitions::get_html_tag;
-use crate::tokens::{Token, TokenType, Value};
 
-#[derive(Copy, Clone, Debug)]
-enum TokenizerError {
+use crate::{
+    contexts, definitions,
+    definitions::get_html_tag,
+    tokens,
+    tokens::{Token, TokenType, Value},
+};
+
+#[derive(Copy, Clone, Debug, thiserror::Error)]
+pub enum TokenizerError {
     BadRoute(u64),
     UnexpectedTagCloseSelfClose,
     MissedTagCloseOpen,
-    NonEmptyExitStack
+    NonEmptyExitStack,
+}
+
+impl Display for TokenizerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokenizerError::BadRoute(context) => write!(f, "Bad route encountered with context: {}", context),
+            TokenizerError::UnexpectedTagCloseSelfClose => write!(f, "Unexpected tag close self-close"),
+            TokenizerError::MissedTagCloseOpen => write!(f, "Missed tag close open"),
+            TokenizerError::NonEmptyExitStack => write!(f, "Non-empty exit stack encountered"),
+        }
+    }
 }
 
 impl TokenizerError {
@@ -573,9 +589,9 @@ impl Tokenizer {
             || (this == "=" && (ctx & (contexts::TEMPLATE_PARAM_KEY | contexts::HEADING) != 0))
             || (this == nxt && this == "}" && (ctx & contexts::TEMPLATE != 0))
             || (this == nxt
-            && this == "}"
-            && after == Either::Left("}".to_string())
-            && (ctx & contexts::ARGUMENT != 0))
+                && this == "}"
+                && after == Either::Left("}".to_string())
+                && (ctx & contexts::ARGUMENT != 0))
     }
 
     fn really_parse_external_link(
@@ -624,14 +640,14 @@ impl Tokenizer {
                     }
                 }
                 Either::Left(ref s)
-                if s == "{" && nxt == Either::Left("{".to_string()) && self.can_recurse() =>
-                    {
-                        if !tail.is_empty() {
-                            self.emit_text(tail.clone());
-                            tail.clear();
-                        }
-                        self.parse_template_or_argument()?;
+                    if s == "{" && nxt == Either::Left("{".to_string()) && self.can_recurse() =>
+                {
+                    if !tail.is_empty() {
+                        self.emit_text(tail.clone());
+                        tail.clear();
                     }
+                    self.parse_template_or_argument()?;
+                }
                 _ if brackets => {
                     if this == Either::Right(Sentinel::End)
                         || this == Either::Left("\n".to_string())
@@ -733,16 +749,8 @@ impl Tokenizer {
         match self.really_parse_external_link(brackets) {
             Ok((link, extra)) => {
                 if !brackets {
-                    let tmp = link[0]
-                        .get("text")
-                        .unwrap()
-                        .clone()
-                        .unwrap_string();
-                    let scheme = tmp
-                        .split(':')
-                        .next()
-                        .unwrap()
-                        .to_string();
+                    let tmp = link[0].get("text").unwrap().clone().unwrap_string();
+                    let scheme = tmp.split(':').next().unwrap().to_string();
                     self.remove_uri_scheme_from_textbuffer(&scheme);
                 }
                 let mut tmp = Token::external_link_open();
@@ -770,14 +778,36 @@ impl Tokenizer {
 
     fn parse_heading(&mut self) -> Result<(), TokenizerError> {
         self.global |= contexts::GL_HEADING;
-        // let reset = self.head.clone();
+        let reset = self.head.clone();
         self.head += 1;
         let mut best = 1;
         while self.read(None, None)? == Either::Left("=".to_string()) {
             best += 1;
             self.head += 1;
         }
-        *self.context_mut() = contexts::HEADING_LEVEL_1 << (best - 1).min(5);
+        let context = contexts::HEADING_LEVEL_1 << (best - 1).min(5);
+
+        match self.parse(Some(context), None) {
+            Ok(after) => {
+                // IMPORTANT: THIS IS A HACK TO TRY TO KEEP THE ARCHITECTURE IN LINE WITH PYTHON
+                let mut after = after;
+                let last = after.pop().unwrap();
+                // Now follow python
+                let title = after;
+                let level = last.get("level").cloned().unwrap().unwrap_integer() as usize;
+                self.emit(last);
+                if level < best {
+                    self.emit_text("=".repeat(best as usize - level));
+                }
+                self.emit_all(title);
+                self.emit(Token::heading_end());
+            }
+            Err(_) => {
+                self.head = reset + (best as i64) - 1;
+                self.emit_text("=".repeat(best));
+            }
+        }
+        self.global ^= contexts::GL_HEADING;
         Ok(())
     }
 
@@ -1045,12 +1075,8 @@ impl Tokenizer {
                                 self.push(None);
                                 self.emit_style_tag("i".to_string(), "''".to_string(), stack);
                                 self.emit_all(stack2);
-                                let tmp =                                     self.pop(None);
-                                self.emit_style_tag(
-                                    "b".to_string(),
-                                    "'''".to_string(),
-                                    tmp
-                                );
+                                let tmp = self.pop(None);
+                                self.emit_style_tag("b".to_string(), "'''".to_string(), tmp);
                             }
                             Err(_) => {
                                 self.head = reset;
@@ -1277,16 +1303,16 @@ impl Tokenizer {
                     return true;
                 }
                 Either::Left(ref s)
-                if s == "}"
-                    || (s == "<"
-                    && self
-                    .read(Some(1), None)
-                    .unwrap_or(Either::Right(Sentinel::End))
-                    == Either::Left("!".to_string())) =>
-                    {
-                        *self.context_mut() |= contexts::FAIL_NEXT;
-                        return true;
-                    }
+                    if s == "}"
+                        || (s == "<"
+                            && self
+                                .read(Some(1), None)
+                                .unwrap_or(Either::Right(Sentinel::End))
+                                == Either::Left("!".to_string())) =>
+                {
+                    *self.context_mut() |= contexts::FAIL_NEXT;
+                    return true;
+                }
                 Either::Left(ref s) if s == "[" || s == "]" || s == "<" || s == ">" => {
                     return false;
                 }
@@ -1319,22 +1345,22 @@ impl Tokenizer {
         } else if context & contexts::FAIL_ON_LBRACE != 0 {
             match this {
                 Either::Left(ref s)
-                if s == "{"
-                    || (self
-                    .read(Some(-1), None)
-                    .unwrap_or(Either::Right(Sentinel::End))
-                    == self
-                    .read(Some(-2), None)
-                    .unwrap_or(Either::Right(Sentinel::End))
-                    && s == "{") =>
-                    {
-                        if context & contexts::TEMPLATE != 0 {
-                            *self.context_mut() |= contexts::FAIL_ON_EQUALS;
-                        } else {
-                            *self.context_mut() |= contexts::FAIL_NEXT;
-                        }
-                        return true;
+                    if s == "{"
+                        || (self
+                            .read(Some(-1), None)
+                            .unwrap_or(Either::Right(Sentinel::End))
+                            == self
+                                .read(Some(-2), None)
+                                .unwrap_or(Either::Right(Sentinel::End))
+                            && s == "{") =>
+                {
+                    if context & contexts::TEMPLATE != 0 {
+                        *self.context_mut() |= contexts::FAIL_ON_EQUALS;
+                    } else {
+                        *self.context_mut() |= contexts::FAIL_NEXT;
                     }
+                    return true;
+                }
                 _ => {
                     *self.context_mut() ^= contexts::FAIL_ON_LBRACE;
                 }
@@ -1353,7 +1379,11 @@ impl Tokenizer {
         true
     }
 
-    fn parse(&mut self, context: Option<u64>, push: Option<bool>) -> Result<Vec<Token>, TokenizerError> {
+    fn parse(
+        &mut self,
+        context: Option<u64>,
+        push: Option<bool>,
+    ) -> Result<Vec<Token>, TokenizerError> {
         let push = push.unwrap_or(true);
         if push {
             self.push(context);
@@ -1399,7 +1429,9 @@ impl Tokenizer {
                 "}" if this == nxt && self.context() & contexts::TEMPLATE != 0 => {
                     return self.handle_template_end();
                 }
-                "|" if self.context() & contexts::ARGUMENT_NAME != 0 => self.handle_argument_separator()?,
+                "|" if self.context() & contexts::ARGUMENT_NAME != 0 => {
+                    self.handle_argument_separator()?
+                }
                 "}" if this == nxt && self.context() & contexts::ARGUMENT != 0 => {
                     if self.read(Some(2), None)? == Either::Left("}".to_string()) {
                         return self.handle_argument_end();
@@ -1413,7 +1445,9 @@ impl Tokenizer {
                         self.emit_text("[".to_string());
                     }
                 }
-                "|" if self.context() & contexts::WIKILINK_TITLE != 0 => self.handle_wikilink_separator(),
+                "|" if self.context() & contexts::WIKILINK_TITLE != 0 => {
+                    self.handle_wikilink_separator()
+                }
                 "]" if this == nxt && self.context() & contexts::WIKILINK != 0 => {
                     return Ok(self.handle_wikilink_end());
                 }
@@ -1422,14 +1456,23 @@ impl Tokenizer {
                     self.parse_external_link(false)?;
                 }
                 "]" if self.context() & contexts::EXT_LINK_TITLE != 0 => return Ok(self.pop(None)),
-                "=" if self.global & contexts::GL_HEADING == 0 && self.context() & contexts::TEMPLATE == 0 => {
+                "=" if self.global & contexts::GL_HEADING == 0
+                    && self.context() & contexts::TEMPLATE == 0 =>
+                {
                     if self.read(Some(-1), None)?.unwrap_left() == "\n" {
                         self.parse_heading()?;
                     } else {
                         self.emit_text("=".to_string());
                     }
                 }
-                "=" if self.context() & contexts::HEADING != 0 => return Ok(self.handle_heading_end()?.0),
+                "=" if self.context() & contexts::HEADING != 0 => {
+                    // IMPORTANT: THIS IS A HACK TO TRY TO KEEP THE ARCHITECTURE IN LINE WITH PYTHON
+                    let (mut out, l) = self.handle_heading_end()?;
+                    let mut tmp = Token::heading_start();
+                    tmp.insert("level".to_string(), Value::Integer(l as i64));
+                    out.push(tmp);
+                    return Ok(out);
+                }
                 "\n" if self.context() & contexts::HEADING != 0 => return Err(self.fail_route()),
                 "&" => self.parse_entity()?,
                 "<" if nxt.clone().unwrap_left() == "!" => {
@@ -1441,7 +1484,9 @@ impl Tokenizer {
                         self.emit_text("<".to_string());
                     }
                 }
-                "<" if nxt.clone().unwrap_left() == "/" && self.read(Some(2), None)? != Either::Right(Sentinel::End) => {
+                "<" if nxt.clone().unwrap_left() == "/"
+                    && self.read(Some(2), None)? != Either::Right(Sentinel::End) =>
+                {
                     if self.context() & contexts::TAG_BODY != 0 {
                         self.handle_tag_open_close();
                     } else {
@@ -1457,7 +1502,9 @@ impl Tokenizer {
                         self.emit_text("<".to_string());
                     }
                 }
-                ">" if self.context() & contexts::TAG_CLOSE != 0 => return Ok(self.handle_tag_close_close()),
+                ">" if self.context() & contexts::TAG_CLOSE != 0 => {
+                    return Ok(self.handle_tag_close_close());
+                }
                 "'" if this == nxt && !self.skip_style_tags => {
                     if let Ok(result) = self.parse_style() {
                         return Ok(result);
@@ -1466,7 +1513,10 @@ impl Tokenizer {
                 "#" | "*" | ";" | ":" if self.read(Some(-1), None)?.unwrap_left() == "\n" => {
                     self.handle_list()?;
                 }
-                "-" if this == nxt && self.read(Some(2), None)? == this && self.read(Some(3), None)? == this => {
+                "-" if this == nxt
+                    && self.read(Some(2), None)? == this
+                    && self.read(Some(3), None)? == this =>
+                {
                     self.handle_hr()?;
                 }
                 "\n" | ":" if self.context() & contexts::DL_TERM != 0 => {
@@ -1483,32 +1533,45 @@ impl Tokenizer {
                     }
                 }
                 "|" if self.context() & contexts::TABLE_OPEN != 0 => {
-                    if nxt.clone().unwrap_left() == "|" && self.context() & contexts::TABLE_TD_LINE != 0 {
+                    if nxt.clone().unwrap_left() == "|"
+                        && self.context() & contexts::TABLE_TD_LINE != 0
+                    {
                         if self.context() & contexts::TABLE_CELL_OPEN != 0 {
                             return Ok(self.handle_table_cell_end(None));
                         }
                         unimplemented!();
                         // TODO:
-                        // self.handle_table_cell("||".to_string(), "td".to_string(), contexts::TABLE_TD_LINE);
-                    } else if nxt.clone().unwrap_left() == "|" && self.context() & contexts::TABLE_TH_LINE != 0 {
+                        // self.handle_table_cell("||".to_string(),
+                        // "td".to_string(), contexts::TABLE_TD_LINE);
+                    } else if nxt.clone().unwrap_left() == "|"
+                        && self.context() & contexts::TABLE_TH_LINE != 0
+                    {
                         if self.context() & contexts::TABLE_CELL_OPEN != 0 {
                             return Ok(self.handle_table_cell_end(None));
                         }
                         unimplemented!();
                         // TODO:
-                        // self.handle_table_cell("||".to_string(), "th".to_string(), contexts::TABLE_TH_LINE);
-                    } else if nxt.clone().unwrap_left() == "!" && self.context() & contexts::TABLE_TH_LINE != 0 {
+                        // self.handle_table_cell("||".to_string(),
+                        // "th".to_string(), contexts::TABLE_TH_LINE);
+                    } else if nxt.clone().unwrap_left() == "!"
+                        && self.context() & contexts::TABLE_TH_LINE != 0
+                    {
                         if self.context() & contexts::TABLE_CELL_OPEN != 0 {
                             return Ok(self.handle_table_cell_end(None));
                         }
                         unimplemented!();
                         // TODO:
-                        // self.handle_table_cell("!!".to_string(), "th".to_string(), contexts::TABLE_TH_LINE);
-                    } else if this.clone().unwrap_left() == "|" && self.context() & contexts::TABLE_CELL_STYLE != 0 {
+                        // self.handle_table_cell("!!".to_string(),
+                        // "th".to_string(), contexts::TABLE_TH_LINE);
+                    } else if this.clone().unwrap_left() == "|"
+                        && self.context() & contexts::TABLE_CELL_STYLE != 0
+                    {
                         unimplemented!();
                         // TODO:
                         // return Ok(self.handle_table_cell_end_with_style()?);
-                    } else if this.clone().unwrap_left() == "\n" && self.context() & contexts::TABLE_CELL_LINE_CONTEXTS != 0 {
+                    } else if this.clone().unwrap_left() == "\n"
+                        && self.context() & contexts::TABLE_CELL_LINE_CONTEXTS != 0
+                    {
                         *self.context_mut() &= !contexts::TABLE_CELL_LINE_CONTEXTS;
                         self.emit_text("\n".to_string());
                     } else if self.read(Some(-1), None)?.unwrap_left() == "\n" {
@@ -1541,14 +1604,16 @@ impl Tokenizer {
                             }
                             unimplemented!()
                             // TODO
-                            // self.handle_table_cell("|".to_string(), "td".to_string(), contexts::TABLE_TD_LINE);
+                            // self.handle_table_cell("|".to_string(),
+                            // "td".to_string(), contexts::TABLE_TD_LINE);
                         } else if this.unwrap_left() == "!" {
                             if self.context() & contexts::TABLE_CELL_OPEN != 0 {
                                 return Ok(self.handle_table_cell_end(None));
                             }
                             unimplemented!()
                             // TODO:
-                            // self.handle_table_cell("!".to_string(), "th".to_string(), contexts::TABLE_TH_LINE);
+                            // self.handle_table_cell("!".to_string(),
+                            // "th".to_string(), contexts::TABLE_TH_LINE);
                         }
                     }
                 }
@@ -1557,7 +1622,12 @@ impl Tokenizer {
         }
     }
 
-    pub fn tokenize(&mut self, text: String, context: u64, skip_style_tags: bool) -> Result<Vec<Token>, TokenizerError> {
+    pub fn tokenize(
+        &mut self,
+        text: String,
+        context: u64,
+        skip_style_tags: bool,
+    ) -> Result<Vec<Token>, TokenizerError> {
         // Build a list of tokens from a string of wikicode and return it.
         let split: Vec<String> = Self::regex()
             .split(&text)
@@ -1582,13 +1652,17 @@ impl Tokenizer {
 
 #[cfg(test)]
 mod tests {
-    use crate::tokenizer::Tokenizer;
-    use crate::tokens::{Token, TokenType};
+    use crate::{
+        tokenizer::Tokenizer,
+        tokens::{Token, TokenType},
+    };
 
     #[test]
     fn test_basic() {
         let mut tokenizer = Tokenizer::new();
-        let out = tokenizer.tokenize("Hello, world!".to_string(), 0, false).unwrap();
+        let out = tokenizer
+            .tokenize("Hello, world!".to_string(), 0, false)
+            .unwrap();
         dbg!(&out);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].token_type, TokenType::Text);

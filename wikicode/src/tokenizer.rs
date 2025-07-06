@@ -1,7 +1,12 @@
-use std::collections::HashSet;
-use std::fmt::Display;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    ops::{BitOr, BitXor},
+};
+
 use either::Either;
 use regex::Regex;
+
 use crate::{
     contexts, definitions,
     definitions::get_html_tag,
@@ -18,8 +23,7 @@ fn split_with_captures<'t>(re: &Regex, text: &'t str) -> Vec<&'t str> {
         // 1) push the text before this match
         pieces.push(&text[last_end..mat.start()]);
 
-        // 2) push each capturing‐group’s text
-        //    (skip cap[0], which is the full match)
+        // 2) push each capturing‐group’s text (skip cap[0], which is the full match)
         for i in 1..caps.len() {
             if let Some(group) = caps.get(i) {
                 pieces.push(group.as_str());
@@ -45,8 +49,12 @@ pub enum TokenizerError {
 impl Display for TokenizerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TokenizerError::BadRoute(context) => write!(f, "Bad route encountered with context: {}", context),
-            TokenizerError::UnexpectedTagCloseSelfClose => write!(f, "Unexpected tag close self-close"),
+            TokenizerError::BadRoute(context) => {
+                write!(f, "Bad route encountered with context: {}", context)
+            }
+            TokenizerError::UnexpectedTagCloseSelfClose => {
+                write!(f, "Unexpected tag close self-close")
+            }
             TokenizerError::MissedTagCloseOpen => write!(f, "Missed tag close open"),
             TokenizerError::NonEmptyExitStack => write!(f, "Non-empty exit stack encountered"),
         }
@@ -58,6 +66,42 @@ impl TokenizerError {
         match self {
             TokenizerError::BadRoute(context) => context,
             _ => panic!("Expected BadRoute, found {:?}", self),
+        }
+    }
+}
+
+bitflags::bitflags! {
+    #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    struct TagOpenDataContext: u64 {
+        const CX_NAME = 1 << 0;
+        const CX_ATTR_READY = 1 << 1;
+        const CX_ATTR_NAME = 1 << 2;
+        const CX_ATTR_VALUE = 1 << 3;
+        const CX_QUOTED = 1 << 4;
+        const CX_NOTE_SPACE = 1 << 5;
+        const CX_NOTE_EQUALS = 1 << 6;
+        const CX_NOTE_QUOTE = 1 << 7;
+    }
+}
+
+struct TagOpenData {
+    pub context: TagOpenDataContext,
+    pub padding_buffer: HashMap<String, String>,
+    pub quoter: Option<()>,
+    pub reset: i64,
+}
+
+impl TagOpenData {
+    pub fn new() -> Self {
+        let mut padding_buffer = HashMap::new();
+        padding_buffer.insert("first".to_string(), String::new());
+        padding_buffer.insert("before_eq".to_string(), String::new());
+        padding_buffer.insert("after_eq".to_string(), String::new());
+        TagOpenData {
+            context: TagOpenDataContext::CX_NAME,
+            padding_buffer,
+            quoter: None,
+            reset: 0,
         }
     }
 }
@@ -98,12 +142,11 @@ impl<'a> Marker<'a> {
     }
 }
 
-impl Into<Marker<'static>> for Either<String, Sentinel> {
-    fn into(self) -> Marker<'static> {
-        match self {
-            // TODO: Very bad
-            Either::Left(s) => Marker::Str(Box::leak(s.into_boxed_str())),
-            Either::Right(s) => Marker::Sentinel(s),
+impl From<Marker<'_>> for Either<String, Sentinel> {
+    fn from(marker: Marker) -> Self {
+        match marker {
+            Marker::Str(s) => Either::Left(s.to_string()),
+            Marker::Sentinel(s) => Either::Right(s),
         }
     }
 }
@@ -490,10 +533,15 @@ impl Tokenizer {
                 if self.context() & contexts::EXT_LINK_TITLE != 0 {
                     self.head = reset;
                     self.emit_text("[[".to_string());
-                    return Ok(())
+                    return Ok(());
                 }
                 self.emit_text("[".to_string());
-                todo!();
+                let mut tmp = Token::external_link_open();
+                tmp.insert("brackets".to_string(), Value::Bool(true));
+                self.emit(tmp);
+                self.emit_all(link);
+                self.emit(Token::external_link_close());
+                Ok(())
             }
             Err(_) => {
                 self.head = reset + 1;
@@ -511,8 +559,6 @@ impl Tokenizer {
                 return Ok(());
             }
         }
-        // TODO: needs Self::really_parse_external_link()
-        todo!();
     }
 
     fn handle_wikilink_separator(&mut self) {
@@ -911,9 +957,29 @@ impl Tokenizer {
     }
 
     // TODO: really_parse_entity()
-    fn parse_entity(&mut self) -> Result<(), TokenizerError> {
+    fn really_parse_entity(&mut self) -> Result<(), TokenizerError> {
         // TODO: fix
-        unimplemented!();
+        todo!();
+    }
+
+    fn parse_entity(&mut self) -> Result<(), TokenizerError> {
+        let reset = self.head;
+        self.push(Some(contexts::HTML_ENTITY))?;
+        match self.really_parse_entity() {
+            Ok(()) => {
+                let tmp = self.pop(None);
+                self.emit_all(tmp);
+            }
+            Err(TokenizerError::BadRoute(_)) => {
+                self.head = reset;
+                let text = self.read(None, None)?.unwrap_left();
+                self.emit_text(text);
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        }
+        Ok(())
     }
 
     /// Parse an HTML comment at the head of the wikicode string.
@@ -978,9 +1044,22 @@ impl Tokenizer {
         Ok(())
     }
 
-    fn handle_tag_close_close(&mut self) -> Vec<Token> {
-        // TODO: Implement this
-        todo!();
+    fn handle_tag_close_close(&mut self) -> Result<Vec<Token>, TokenizerError> {
+        fn strip(token: Token) -> String {
+            let text = token.get("text").cloned().unwrap().unwrap_string();
+            text.trim_end().to_lowercase()
+        }
+
+        let closing = self.pop(None);
+        if closing.len() != 1
+            || (!matches!(closing[0].token_type.clone(), TokenType::Text)
+                || (strip(closing[0].clone()) != strip(self.stack()[1].clone())))
+        {
+            return Err(self.fail_route());
+        }
+        self.emit_all(closing);
+        self.emit(Token::tag_close_close());
+        return Ok(self.pop(None));
     }
 
     // TODO: handle_blacklisted_tag()
@@ -1042,14 +1121,65 @@ impl Tokenizer {
         Ok(self.pop(None))
     }
 
-    // TODO: really_parse_tag()
-    // TODO: handle_invalid_tag_start()
+    fn really_parse_tag(&mut self) -> Result<Vec<Token>, TokenizerError> {
+        let mut data = TagOpenData::new();
+        self.push(Some(contexts::TAG_OPEN))?;
+        self.emit(Token::tag_open_open());
+        loop {
+            let (this, nxt) = (self.read(None, None)?, self.read(Some(1), None)?);
+            let can_exit = data
+                .context
+                .bitxor(TagOpenDataContext::CX_QUOTED.bitor(TagOpenDataContext::CX_NAME))
+                .bits()
+                == 0
+                || data
+                    .context
+                    .bitxor(TagOpenDataContext::CX_NOTE_SPACE)
+                    .bits()
+                    != 0;
+            if this == Either::Right(Sentinel::End) {
+                if self.context() & contexts::TAG_ATTR != 0 {
+                    if data.context.bitxor(TagOpenDataContext::CX_QUOTED).bits() != 0 {
+                        data.context = TagOpenDataContext::CX_ATTR_VALUE;
+                        self.memoize_bad_route();
+                        self.pop(None);
+                        self.head = data.reset;
+                        continue;
+                    }
+                    self.pop(None);
+                }
+                return Err(self.fail_route());
+            } else if this == Either::Left(">".to_string()) && can_exit {
+                todo!();
+            }
+            todo!();
+        }
+        // TODO: Fix
+        todo!();
+    }
+
+    fn handle_invalid_tag_start(&mut self) -> Result<(), TokenizerError> {
+        let reset = self.head.clone() + 1;
+        self.head += 2;
+        assert_ne!(self.read(None, None)?, Either::Right(Sentinel::End));
+        // TODO: check for is_single_only
+        let mut tag = self.really_parse_tag()?;
+        tag[0].insert("invalid".to_string(), Value::Bool(true));
+        self.emit_all(tag);
+        Ok(())
+    }
 
     fn parse_tag(&mut self) -> Result<(), TokenizerError> {
         let reset = self.head.clone();
         self.head += 1;
-        todo!()
-        // needs Self::really_parse_tag()
+        match self.really_parse_tag() {
+            Ok(tag) => self.emit_all(tag),
+            Err(_) => {
+                self.head = reset;
+                self.emit_text("<".to_string());
+            }
+        }
+        Ok(())
     }
 
     fn emit_style_tag(&mut self, tag: String, markup: String, body: Vec<Token>) {
@@ -1285,6 +1415,16 @@ impl Tokenizer {
         todo!()
     }
 
+    fn handle_table_cell(
+        &mut self,
+        markup: String,
+        tag: String,
+        line_context: u64,
+    ) -> Result<(), TokenizerError> {
+        // TODO: Finish
+        todo!();
+    }
+
     fn handle_table_cell_end(&mut self, reset_for_style: Option<bool>) -> Vec<Token> {
         let reset_for_style = reset_for_style.unwrap_or(false);
         if reset_for_style {
@@ -1466,7 +1606,11 @@ impl Tokenizer {
                     return Err(self.fail_route());
                 }
             }
-            if !MARKERS.contains(&this.clone().into()) {
+            if !&this
+                .clone()
+                .left()
+                .map_or(true, |s| MARKERS.contains(&Marker::Str(&s)))
+            {
                 self.emit_text(this.unwrap_left());
                 self.head += 1;
                 continue;
@@ -1486,7 +1630,11 @@ impl Tokenizer {
                 "|" if self.context() & contexts::TEMPLATE != 0 => self.handle_template_param()?,
                 "=" if self.context() & contexts::TEMPLATE_PARAM_KEY != 0 => {
                     if self.global & contexts::GL_HEADING == 0
-                        && vec![Either::Left("\n".to_string()), Either::Right(Sentinel::Start)].contains(&self.read(Some(-1), None)?)
+                        && vec![
+                            Either::Left("\n".to_string()),
+                            Either::Right(Sentinel::Start),
+                        ]
+                        .contains(&self.read(Some(-1), None)?)
                         && nxt.unwrap_left() == "="
                     {
                         self.parse_heading()?;
@@ -1526,17 +1674,19 @@ impl Tokenizer {
                 "]" if self.context() & contexts::EXT_LINK_TITLE != 0 => return Ok(self.pop(None)),
                 "=" if self.global & contexts::GL_HEADING == 0
                     && self.context() & contexts::TEMPLATE == 0 =>
+                {
+                    let prev = self.read(Some(-1), None)?;
+                    if vec![
+                        Either::Left("\n".to_string()),
+                        Either::Right(Sentinel::Start),
+                    ]
+                    .contains(&prev)
                     {
-                        let prev = self.read(Some(-1), None)?;
-                        if vec![
-                            Either::Left("\n".to_string()),
-                            Either::Right(Sentinel::Start),
-                        ].contains(&prev) {
-                            self.parse_heading()?;
-                        } else {
-                            self.emit_text("=".to_string());
-                        }
+                        self.parse_heading()?;
+                    } else {
+                        self.emit_text("=".to_string());
                     }
+                }
                 "=" if self.context() & contexts::HEADING != 0 => {
                     // IMPORTANT: THIS IS A HACK TO TRY TO KEEP THE ARCHITECTURE IN LINE WITH PYTHON
                     // Heading is over
@@ -1563,9 +1713,7 @@ impl Tokenizer {
                     if self.context() & contexts::TAG_BODY != 0 {
                         self.handle_tag_open_close()?;
                     } else {
-                        unimplemented!();
-                        // TODO:
-                        // self.handle_invalid_tag_start();
+                        self.handle_invalid_tag_start()?;
                     }
                 }
                 "<" if self.context() & contexts::TAG_CLOSE == 0 => {
@@ -1576,7 +1724,7 @@ impl Tokenizer {
                     }
                 }
                 ">" if self.context() & contexts::TAG_CLOSE != 0 => {
-                    return Ok(self.handle_tag_close_close());
+                    return Ok(self.handle_tag_close_close()?);
                 }
                 "'" if this == nxt && !self.skip_style_tags => {
                     if let Some(result) = self.parse_style()? {
@@ -1612,35 +1760,38 @@ impl Tokenizer {
                         if self.context() & contexts::TABLE_CELL_OPEN != 0 {
                             return Ok(self.handle_table_cell_end(None));
                         }
-                        unimplemented!();
-                        // TODO:
-                        // self.handle_table_cell("||".to_string(),
-                        // "td".to_string(), contexts::TABLE_TD_LINE);
+                        self.handle_table_cell(
+                            "||".to_string(),
+                            "td".to_string(),
+                            contexts::TABLE_TD_LINE,
+                        )?;
                     } else if nxt.clone().unwrap_left() == "|"
                         && self.context() & contexts::TABLE_TH_LINE != 0
                     {
                         if self.context() & contexts::TABLE_CELL_OPEN != 0 {
                             return Ok(self.handle_table_cell_end(None));
                         }
-                        unimplemented!();
-                        // TODO:
-                        // self.handle_table_cell("||".to_string(),
-                        // "th".to_string(), contexts::TABLE_TH_LINE);
+                        self.handle_table_cell(
+                            "||".to_string(),
+                            "th".to_string(),
+                            contexts::TABLE_TH_LINE,
+                        )?;
                     } else if nxt.clone().unwrap_left() == "!"
                         && self.context() & contexts::TABLE_TH_LINE != 0
                     {
                         if self.context() & contexts::TABLE_CELL_OPEN != 0 {
                             return Ok(self.handle_table_cell_end(None));
                         }
-                        unimplemented!();
-                        // TODO:
-                        // self.handle_table_cell("!!".to_string(),
-                        // "th".to_string(), contexts::TABLE_TH_LINE);
+                        self.handle_table_cell(
+                            "!!".to_string(),
+                            "th".to_string(),
+                            contexts::TABLE_TH_LINE,
+                        )?;
                     } else if this.clone().unwrap_left() == "|"
                         && self.context() & contexts::TABLE_CELL_STYLE != 0
                     {
                         unimplemented!();
-                        // TODO:
+                        // TODO: fix
                         // return Ok(self.handle_table_cell_end_with_style()?);
                     } else if this.clone().unwrap_left() == "\n"
                         && self.context() & contexts::TABLE_CELL_LINE_CONTEXTS != 0
@@ -1655,38 +1806,34 @@ impl Tokenizer {
                             if self.context() & contexts::TABLE_ROW_OPEN != 0 {
                                 return Ok(self.handle_table_row_end());
                             }
-                            unimplemented!()
-                            // TODO:
-                            // return Ok(self.handle_table_end()?);
+                            return Ok(self.handle_table_end());
                         }
                         if this.clone().unwrap_left() == "|" && nxt.unwrap_left() == "-" {
                             if self.context() & contexts::TABLE_CELL_OPEN != 0 {
                                 return Ok(self.handle_table_cell_end(None));
                             }
                             if self.context() & contexts::TABLE_ROW_OPEN != 0 {
-                                unimplemented!()
-                                // TODO:
-                                // return Ok(self.handle_table_row_end()?);
+                                return Ok(self.handle_table_row_end());
                             }
-                            unimplemented!();
-                            // TODO:
-                            // self.handle_table_row();
+                            self.handle_table_row();
                         } else if this.clone().unwrap_left() == "|" {
                             if self.context() & contexts::TABLE_CELL_OPEN != 0 {
                                 return Ok(self.handle_table_cell_end(None));
                             }
-                            unimplemented!()
-                            // TODO
-                            // self.handle_table_cell("|".to_string(),
-                            // "td".to_string(), contexts::TABLE_TD_LINE);
+                            self.handle_table_cell(
+                                "|".to_string(),
+                                "td".to_string(),
+                                contexts::TABLE_TD_LINE,
+                            )?;
                         } else if this.unwrap_left() == "!" {
                             if self.context() & contexts::TABLE_CELL_OPEN != 0 {
                                 return Ok(self.handle_table_cell_end(None));
                             }
-                            unimplemented!()
-                            // TODO:
-                            // self.handle_table_cell("!".to_string(),
-                            // "th".to_string(), contexts::TABLE_TH_LINE);
+                            self.handle_table_cell(
+                                "!".to_string(),
+                                "th".to_string(),
+                                contexts::TABLE_TH_LINE,
+                            )?;
                         }
                     }
                 }

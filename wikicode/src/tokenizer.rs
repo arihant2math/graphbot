@@ -1529,8 +1529,49 @@ impl Tokenizer {
         tag: String,
         line_context: u64,
     ) -> Result<(), TokenizerError> {
-        // TODO: Finish
-        todo!();
+        let old_context = self.context();
+        let mut padding = String::new();
+        let mut style = Vec::new();
+        self.head += markup.len() as i64;
+        let reset = self.head;
+
+        if !self.can_recurse() {
+            self.emit_text(markup);
+            self.head -= 1;
+            return Ok(());
+        }
+
+        let mut cell = self.parse(Some(
+            contexts::TABLE_OPEN
+                | contexts::TABLE_CELL_OPEN
+                | line_context
+                | contexts::TABLE_CELL_STYLE,
+        ), None)?;
+
+        let cell_context = self.context();
+        *self.context_mut() = old_context;
+        let reset_for_style = cell_context & contexts::TABLE_CELL_STYLE != 0;
+
+        if reset_for_style {
+            self.head = reset;
+            self.push(Some(
+                contexts::TABLE_OPEN | contexts::TABLE_CELL_OPEN | line_context,
+            ))?;
+            padding = self.handle_table_style("|")?;
+            style = self.pop(None);
+            self.head += 1; // Skip the style separator
+            cell = self.parse(Some(
+                contexts::TABLE_OPEN | contexts::TABLE_CELL_OPEN | line_context,
+            ), None)?;
+            *self.context_mut() = old_context;
+        }
+
+        let close_open_markup = if reset_for_style { Some("|".to_string()) } else { None };
+        self.emit_table_tag(markup, tag, style, padding, close_open_markup, cell, "".to_string());
+
+        *self.context_mut() |= cell_context & (contexts::TABLE_TH_LINE | contexts::TABLE_TD_LINE);
+        self.head -= 1; // Offset displacement done by parse()
+        Ok(())
     }
 
     fn handle_table_cell_end(&mut self, reset_for_style: Option<bool>) -> Vec<Token> {

@@ -1491,7 +1491,7 @@ impl Tokenizer {
         Ok(())
     }
 
-    // TOOD: emit_table_tag
+    // TODO: emit_table_tag
     fn handle_table_style(&mut self, end_token: &str) -> Result<(), TokenizerError> {
         // TODO: Finish
         todo!();
@@ -1518,9 +1518,22 @@ impl Tokenizer {
         todo!()
     }
 
-    fn handle_table_row(&mut self) {
-        // TODO: Finish
-        todo!()
+    fn handle_table_row(&mut self) -> Result<(), TokenizerError> {
+        self.head += 2;
+        if !self.can_recurse() {
+            self.emit_text("|-".to_string());
+            self.head -= 1;
+            return;
+        }
+        self.push(Some(contexts::TABLE_OPEN | contexts::TABLE_ROW_OPEN))?;
+        let padding = self.handle_table_style("\n")?;
+        let mut style = self.pop(None);
+
+        self.head += 1; // Skip the style separator
+        let row = self.parse(Some(contexts::TABLE_OPEN | contexts::TABLE_ROW_OPEN), None)?;
+
+        todo!(Self::emit_table_tag)
+        self.head -= 1; // Offset displacement done by parse()
     }
 
     fn handle_table_cell(

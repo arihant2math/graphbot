@@ -1041,6 +1041,7 @@ dependencies = [
  "diacritics",
  "futures",
  "graphbot-db",
+ "mwapi_responses",
  "mwbot",
  "num_cpus",
  "paste",
@@ -1053,6 +1054,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "url 2.5.4",
  "xml-rpc",
 ]
 
@@ -4332,11 +4334,15 @@ dependencies = [
 name = "wikicode"
 version = "0.1.0"
 dependencies = [
+ "bitflags 2.9.1",
+ "either",
  "html-escape",
  "once_cell",
  "paste",
  "phf 0.12.1",
  "regex",
+ "serde",
+ "thiserror 2.0.12",
 ]
 
 [[package]]

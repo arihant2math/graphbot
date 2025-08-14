@@ -141,7 +141,26 @@ pub fn generate(
         .flatten()
         .ok_or_else(|| anyhow!("'type' attribute not present"))?;
     if chart_type == "pie" {
+        let chart = Chart {
+            license: LICENSE.to_string(),
+            r#type: convert_graph_chart_type(&chart_type),
+            x_axis: None,
+            y_axis: None,
+            source: tab_file_name,
+            title: Some(
+                tag.get("title")
+                    .cloned()
+                    .unwrap_or_default()
+                    .map(LocalizableString::en)
+                    .unwrap_or(LocalizableString::en(name.to_string())),
+            ),
+            ..Default::default()
+        };
         bail!("Pie charts are not supported yet");
+        // Ok(ConversionOutput {
+        //     chart,
+        //     tab: gen_pie_tab(tag, source_url)?,
+        // })
     } else if chart_type.starts_with("stacked") && &chart_type != "stackedrect" {
         bail!("Non-rect stacked charts are not supported yet by the chart extension");
     }

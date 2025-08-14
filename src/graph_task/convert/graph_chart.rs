@@ -24,6 +24,7 @@ fn convert_graph_chart_type(s: &str) -> ChartType {
         "bar" | "rect" => ChartType::Bar,
         "area" => ChartType::Area,
         "pie" => ChartType::Pie,
+        "stackedrect" => ChartType::Area,
         _ => {
             warn!("Unknown chart type '{s}', defaulting to 'line'.");
             ChartType::Line
@@ -142,7 +143,7 @@ pub fn generate(
         .ok_or_else(|| anyhow!("'type' attribute not present"))?;
     if chart_type == "pie" {
         bail!("Not implemented");
-    } else if chart_type.starts_with("stacked") {
+    } else if chart_type.starts_with("stacked") && &chart_type != "stackedrect" {
         bail!("Not implemented");
     }
 

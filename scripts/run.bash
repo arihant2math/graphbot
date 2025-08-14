@@ -3,4 +3,5 @@ source ~/.profile
 cd ~/graphbot
 source .venv/bin/activate
 python3 server.py &
-cargo run -r
+cargo build -r
+./target/release/graphbot

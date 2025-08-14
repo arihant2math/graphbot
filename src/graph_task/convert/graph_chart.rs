@@ -72,7 +72,7 @@ mod number_parse_tests {
         assert_eq!(parse_number("not a number"), None);
         assert_eq!(parse_number(""), None);
         assert_eq!(parse_number(".42"), Number::from_f64(0.42));
-        
+
     }
 }
 
@@ -186,7 +186,7 @@ fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::R
         &tag.get("xType")
             .cloned()
             .unwrap_or_default()
-            .unwrap_or("number".to_string()),
+            .unwrap_or("number".to_string()), // TODO: Need to check actual type
     )
     .to_string();
     let y_type = convert_graph_types(

@@ -123,9 +123,15 @@ async fn handle_template(
     config: &RwLock<Config>,
 ) -> anyhow::Result<Option<Swap>> {
     let mut parsed = parsed;
+    parsed.params = parsed.params.clone().into_iter().map(|mut param| {
+        param.name = param.name.trim().to_string();
+        param.value = param.value.clone().map(|v| v.trim().to_string());
+        param
+    }).collect();
     let title = page.title().to_string();
-    match parsed.name_str() {
+    match parsed.name_str().trim() {
         "PortGraph" | "Graph:Chart" | "GraphChart" => {
+            trace!("Template {:?}", parsed);
             let mut name = parsed.params_get("name").flatten();
 
             // Special handling for demographics related pages

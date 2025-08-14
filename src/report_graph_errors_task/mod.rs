@@ -1,11 +1,11 @@
-use std::path::Path;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{path::Path, sync::Arc, time::Duration};
+
+use graphbot_db::graph_failed_conversions;
 use mwbot::{Bot, SaveOptions};
 use sea_orm::{Database, EntityTrait};
 use tokio::sync::RwLock;
 use tracing::info;
-use graphbot_db::graph_failed_conversions;
+
 use crate::config::Config;
 
 const GRAPH_ERRORS_WIKI_PAGE: &str = "User:GraphBot/Conversion Errors";
@@ -40,19 +40,21 @@ fn generate_wikitext(errors: Vec<graph_failed_conversions::Model>) -> String {
     text.push_str("! scope=\"col\" | Date (UTC)\n");
     for error in errors {
         text.push_str("|-\n");
-        text.push_str(&format!("| [[{}]] || {} || <pre>{}</pre> || {}\n",
-                               error.page_title,
-                               error.rev_id,
-                               error.error.as_deref().unwrap_or("No error message"),
-                               error.date.to_rfc3339(),
+        text.push_str(&format!(
+            "| [[{}]] || {} || <pre>{}</pre> || {}\n",
+            error.page_title,
+            error.rev_id,
+            error.error.as_deref().unwrap_or("No error message"),
+            error.date.to_rfc3339(),
         ));
     }
     text.push_str("|}\n");
     text
 }
 
-pub async fn report_graph_errors_task(wiki_bot: Arc<Bot>,
-                                      config: Arc<RwLock<Config>>,
+pub async fn report_graph_errors_task(
+    wiki_bot: Arc<Bot>,
+    config: Arc<RwLock<Config>>,
 ) -> anyhow::Result<()> {
     while !Path::new("db/graph.db").exists() {
         tokio::time::sleep(Duration::from_secs(10)).await;
@@ -72,12 +74,17 @@ pub async fn report_graph_errors_task(wiki_bot: Arc<Bot>,
         }
         info!("Reporting conversion errors to wiki ...");
         // TODO: Paginate this to reduce memory usage
-        let errors = graphbot_db::prelude::GraphFailedConversions::find().all(&db).await?;
+        let errors = graphbot_db::prelude::GraphFailedConversions::find()
+            .all(&db)
+            .await?;
         let text = generate_wikitext(errors);
         let page = wiki_bot
             .page(GRAPH_ERRORS_WIKI_PAGE)
             .map_err(|e| anyhow::anyhow!("Failed to get page: {}", e))?;
-        let old_text = page.wikitext().await.map_err(|e| anyhow::anyhow!("Failed to get page text: {}", e))?;
+        let old_text = page
+            .wikitext()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to get page text: {}", e))?;
         if old_text == text {
             info!("No changes to report, skipping update.");
         } else {

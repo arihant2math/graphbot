@@ -3,12 +3,13 @@ mod config;
 mod failed_revs;
 mod graph_task;
 mod parser;
+mod report_graph_errors_task;
 mod rev_info;
 mod rfd_task;
 mod server;
-mod report_graph_errors_task;
 
 use std::sync::Arc;
+
 use anyhow::Context;
 use mwbot::Bot;
 use tokio::{join, sync::RwLock, task};
@@ -87,11 +88,12 @@ async fn main() -> anyhow::Result<()> {
         .set_oauth2_token(config.read().await.username.clone(), token.clone())
         .build();
 
-    let commons_bot_future = Bot::builder(COMMONS_API_URL.to_string(), COMMONS_REST_URL.to_string())
-        .set_user_agent(USER_AGENT.to_string())
-        .set_mark_as_bot(true)
-        .set_oauth2_token(config.read().await.username.clone(), token)
-        .build();
+    let commons_bot_future =
+        Bot::builder(COMMONS_API_URL.to_string(), COMMONS_REST_URL.to_string())
+            .set_user_agent(USER_AGENT.to_string())
+            .set_mark_as_bot(true)
+            .set_oauth2_token(config.read().await.username.clone(), token)
+            .build();
     let (wiki_bot, commons_bot) = join!(wiki_bot_future, commons_bot_future);
     let wiki_bot = wiki_bot.context("Failed to initialize wiki bot")?;
     let commons_bot = commons_bot.context("Failed to initialize commons bot")?;
@@ -124,7 +126,9 @@ async fn main() -> anyhow::Result<()> {
         let wiki_bot = Arc::clone(&wiki_bot);
         let config = Arc::clone(&config);
         async move {
-            if let Err(e) = report_graph_errors_task::report_graph_errors_task(wiki_bot, config).await {
+            if let Err(e) =
+                report_graph_errors_task::report_graph_errors_task(wiki_bot, config).await
+            {
                 error!("Report graph errors task failed: {e}");
             }
         }
@@ -158,6 +162,11 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
     });
-    let _ = join!(graph_task, report_graph_errors_task, rfd_task, shutdown_task);
+    let _ = join!(
+        graph_task,
+        report_graph_errors_task,
+        rfd_task,
+        shutdown_task
+    );
     Ok(())
 }

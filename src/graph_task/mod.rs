@@ -18,10 +18,9 @@ use crate::{
     CHART_EXT, TAB_EXT, api_utils,
     config::Config,
     failed_revs::FailedRevs,
-    parser::call_parser,
+    parser::{Node, NodeInnerTemplate, call_parser},
     rev_info::RevInfo,
 };
-use crate::parser::{Node, NodeInnerTemplate};
 
 mod convert;
 pub mod schema;
@@ -57,7 +56,8 @@ async fn create_pages(
                 tab_text,
                 &SaveOptions::summary(&format!(
                     "GraphBot: Create tab file with data from a {} template. Source: {}",
-                    template.name_str(), rev_url
+                    template.name_str(),
+                    rev_url
                 ))
                 .mark_as_bot(true),
             )
@@ -85,7 +85,8 @@ async fn create_pages(
                 chart_text,
                 &SaveOptions::summary(&format!(
                     "GraphBot: Create chart file with data from a {} template. Source: {}",
-                    template.name_str(), rev_url
+                    template.name_str(),
+                    rev_url
                 ))
                 .mark_as_bot(true),
             )
@@ -123,11 +124,16 @@ async fn handle_template(
     config: &RwLock<Config>,
 ) -> anyhow::Result<Option<Swap>> {
     let mut parsed = parsed;
-    parsed.params = parsed.params.clone().into_iter().map(|mut param| {
-        param.name = param.name.trim().to_string();
-        param.value = param.value.clone().map(|v| v.trim().to_string());
-        param
-    }).collect();
+    parsed.params = parsed
+        .params
+        .clone()
+        .into_iter()
+        .map(|mut param| {
+            param.name = param.name.trim().to_string();
+            param.value = param.value.clone().map(|v| v.trim().to_string());
+            param
+        })
+        .collect();
     let title = page.title().to_string();
     match parsed.name_str().trim() {
         "PortGraph" | "Graph:Chart" | "GraphChart" => {
@@ -142,7 +148,13 @@ async fn handle_template(
                 if country.is_empty() {
                     bail!("Country name empty, unreachable");
                 }
-                if parsed.params_map().get("y2Title").cloned().flatten().is_some() {
+                if parsed
+                    .params_map()
+                    .get("y2Title")
+                    .cloned()
+                    .flatten()
+                    .is_some()
+                {
                     bail!(
                         "y2Title is not supported for demographics pages without template graph name"
                     );
@@ -177,9 +189,8 @@ async fn handle_template(
                 }
             }
 
-            let name = name.ok_or_else(|| {
-                anyhow::anyhow!("'name' parameter is required to port the graph")
-            })?;
+            let name = name
+                .ok_or_else(|| anyhow::anyhow!("'name' parameter is required to port the graph"))?;
             // TODO: add section support
             let rev_url = if let Some(rev_info) = rev_info {
                 format!(

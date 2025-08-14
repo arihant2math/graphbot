@@ -1,10 +1,10 @@
 use sea_orm::{
     ActiveModelTrait, ActiveValue, Database, DatabaseConnection, EntityTrait, IntoActiveModel,
+    sqlx::types::chrono,
 };
-use sea_orm::sqlx::types::chrono;
 use tokio::sync::RwLock;
-use crate::config::Config;
-use crate::rev_info::RevInfo;
+
+use crate::{config::Config, rev_info::RevInfo};
 
 pub struct FailedRevs(DatabaseConnection);
 

@@ -73,7 +73,6 @@ mod number_parse_tests {
         assert_eq!(parse_number("not a number"), None);
         assert_eq!(parse_number(""), None);
         assert_eq!(parse_number(".42"), Number::from_f64(0.42));
-
     }
 }
 
@@ -142,9 +141,9 @@ pub fn generate(
         .flatten()
         .ok_or_else(|| anyhow!("'type' attribute not present"))?;
     if chart_type == "pie" {
-        bail!("Not implemented");
+        bail!("Pie charts are not supported yet");
     } else if chart_type.starts_with("stacked") && &chart_type != "stackedrect" {
-        bail!("Not implemented");
+        bail!("Non-rect stacked charts are not supported yet by the chart extension");
     }
 
     let tab_file_name = format!("{name}{TAB_EXT}");

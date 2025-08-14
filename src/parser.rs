@@ -1,9 +1,13 @@
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::ops::{Deref, DerefMut};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+};
+
+use paste::paste;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-use paste::paste;
+
 use crate::config::Config;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -252,7 +256,10 @@ impl NodeInnerTemplate {
         self.params
             .iter()
             .map(|param| {
-                (param.name().to_string(), param.value().map(|s| s.to_string()))
+                (
+                    param.name().to_string(),
+                    param.value().map(|s| s.to_string()),
+                )
             })
             .collect()
     }
@@ -324,7 +331,7 @@ impl NodeInnerWikilink {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Node<I>
 where
-    I: Clone + Debug
+    I: Clone + Debug,
 {
     pub text: String,
     #[serde(flatten)]
@@ -333,7 +340,7 @@ where
 
 impl<T> Deref for Node<T>
 where
-    T: Clone + Debug
+    T: Clone + Debug,
 {
     type Target = T;
 
@@ -344,7 +351,7 @@ where
 
 impl<T> DerefMut for Node<T>
 where
-    T: Clone + Debug
+    T: Clone + Debug,
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
@@ -364,7 +371,7 @@ pub enum NodeInner {
     Tag(NodeInnerTag),
     Template(NodeInnerTemplate),
     Text(NodeInnerText),
-    Wikilink(NodeInnerWikilink)
+    Wikilink(NodeInnerWikilink),
 }
 
 macro_rules! as_part {
@@ -460,17 +467,19 @@ pub struct XMLResponse {
 pub async fn call_parser(input: &str, config: &RwLock<Config>) -> anyhow::Result<OutRoot> {
     let mut client = xml_rpc::Client::new().unwrap();
     let config = config.read().await;
-    let result = client
-        .call(
-            &xml_rpc::Url::parse(&format!(
-                "http://{}:{}/{}",
-                config.rpc.host, config.rpc.port, config.rpc.path
-            ))?,
-            "parse",
-            [input],
-        );
-    let response: XMLResponse = result.map_err(|e| anyhow::anyhow!("XML-RPC call failed: {}", e))
-        .and_then(|response| response.map_err(|e| anyhow::anyhow!("XML-RPC response error: {e:?}")))?;
+    let result = client.call(
+        &xml_rpc::Url::parse(&format!(
+            "http://{}:{}/{}",
+            config.rpc.host, config.rpc.port, config.rpc.path
+        ))?,
+        "parse",
+        [input],
+    );
+    let response: XMLResponse = result
+        .map_err(|e| anyhow::anyhow!("XML-RPC call failed: {}", e))
+        .and_then(|response| {
+            response.map_err(|e| anyhow::anyhow!("XML-RPC response error: {e:?}"))
+        })?;
     let parsed: Wikitext = serde_json::from_str(&response.parsed)?;
     Ok(OutRoot {
         parsed,

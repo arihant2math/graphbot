@@ -1,12 +1,12 @@
-use crate::config::Config;
-use crate::parser;
+use std::{sync::Arc, time::Duration};
+
 use mwapi_responses::query;
 use mwbot::Bot;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::info;
+
+use crate::{config::Config, parser};
 
 const MAIN_RFD_PAGE: &str = "Wikipedia:Redirects for discussion";
 
@@ -46,25 +46,28 @@ struct Rfd {
 //     async fn next(&mut self) -> Option<Self::Item> {
 //         if !self.current.is_empty() {
 //             if let Some(redirect) = self.current.pop() {
-//                 return Some(Ok(redirect.redirects.into_iter().next().unwrap()));
-//             } else {
-//                 unreachable!();
+//                 return
+// Some(Ok(redirect.redirects.into_iter().next().unwrap()));             } else
+// {                 unreachable!();
 //             }
 //         }
-//         let response  = mwapi_responses::query_api(&self.bot.api(), [("prop", "redirects"), ("titles", &self.title), ("rdlimit", "max")]).await;
-//         if let Some(page) = self.current.pop() {
-//             if let Some(redirect) = page.redirects.into_iter().next() {
-//                 return Some(Ok(redirect));
-//             }
+//         let response  = mwapi_responses::query_api(&self.bot.api(), [("prop",
+// "redirects"), ("titles", &self.title), ("rdlimit", "max")]).await;         if
+// let Some(page) = self.current.pop() {             if let Some(redirect) =
+// page.redirects.into_iter().next() {                 return
+// Some(Ok(redirect));             }
 //         }
 //         None
 //     }
 // }
 
-/// Determines whether there are any other redirects, in any namespace, that meet one or more of the following criteria:
+/// Determines whether there are any other redirects, in any namespace, that
+/// meet one or more of the following criteria:
 /// - Are marked as an avoided-double redirect of a nominated redirect
 /// - Are redirects to the nominated redirect
-/// - Redirect to the same target as the nominated redirect and differ only in the presence or absence of non-alphanumeric characters, and/or differ only in case
+/// - Redirect to the same target as the nominated redirect and differ only in
+///   the presence or absence of non-alphanumeric characters, and/or differ only
+///   in case
 async fn inference(rfd: Rfd, wiki_bot: &Bot) -> anyhow::Result<()> {
     info!("Inference called for RFD: {:?}", rfd);
     for redirect in rfd.associated_redirects {
@@ -85,10 +88,11 @@ async fn inference(rfd: Rfd, wiki_bot: &Bot) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{COMMONS_API_URL, COMMONS_REST_URL, USER_AGENT};
     use mwbot::Bot;
     use tokio::join;
+
+    use super::*;
+    use crate::{COMMONS_API_URL, COMMONS_REST_URL, USER_AGENT};
 
     #[tokio::test]
     async fn test_inference() {

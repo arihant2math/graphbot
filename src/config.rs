@@ -111,7 +111,7 @@ impl Config {
             shutdown_graph_task: false,
             pause_graph_task: false,
             shutdown_rfd_task: true,
-            pause_rfd_task: true
+            pause_rfd_task: true,
         }
     }
 
@@ -133,8 +133,14 @@ impl Config {
     }
 
     pub fn load() -> anyhow::Result<Self> {
-        let secret = toml::from_str(&std::fs::read_to_string(SECRET_FILE).context("Failed to open secret config file")?).context("Failed to parse secret config file")?;
-        let main = toml::from_str(&std::fs::read_to_string(MAIN_FILE).context("Failed to open main config file")?).context("Failed to parse main config file")?;
+        let secret = toml::from_str(
+            &std::fs::read_to_string(SECRET_FILE).context("Failed to open secret config file")?,
+        )
+        .context("Failed to parse secret config file")?;
+        let main = toml::from_str(
+            &std::fs::read_to_string(MAIN_FILE).context("Failed to open main config file")?,
+        )
+        .context("Failed to parse main config file")?;
         Ok(Self::from_parts(secret, main))
     }
 }

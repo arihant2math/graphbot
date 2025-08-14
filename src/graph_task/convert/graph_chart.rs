@@ -140,6 +140,20 @@ pub fn generate(
         .cloned()
         .flatten()
         .ok_or_else(|| anyhow!("'type' attribute not present"))?;
+        let tab_file_name = format!("{name}{TAB_EXT}");
+
+    macro_rules! gen_axis {
+        ($tag:expr, $name:expr) => {
+            match $tag.get($name) {
+                Some(Some(value)) => Some(Axis {
+                    title: Some(LocalizableString::en(value.clone())),
+                    ..Axis::default()
+                }),
+                _ => None,
+            }
+        };
+    }
+
     if chart_type == "pie" {
         let chart = Chart {
             license: LICENSE.to_string(),
@@ -163,20 +177,6 @@ pub fn generate(
         // })
     } else if chart_type.starts_with("stacked") && &chart_type != "stackedrect" {
         bail!("Non-rect stacked charts are not supported yet by the chart extension");
-    }
-
-    let tab_file_name = format!("{name}{TAB_EXT}");
-
-    macro_rules! gen_axis {
-        ($tag:expr, $name:expr) => {
-            match $tag.get($name) {
-                Some(Some(value)) => Some(Axis {
-                    title: Some(LocalizableString::en(value.clone())),
-                    ..Axis::default()
-                }),
-                _ => None,
-            }
-        };
     }
 
     let chart = Chart {

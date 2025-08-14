@@ -40,7 +40,7 @@ fn generate_wikitext(errors: Vec<graph_failed_conversions::Model>) -> String {
     text.push_str("! scope=\"col\" | Date (UTC)\n");
     for error in errors {
         text.push_str("|-\n");
-        text.push_str(&format!("| {} || {} || <code>{}</code> || {}\n",
+        text.push_str(&format!("| [[{}]] || {} || <code>{}</code> || {}\n",
                                error.page_title,
                                error.rev_id,
                                error.error.as_deref().unwrap_or("No error message"),

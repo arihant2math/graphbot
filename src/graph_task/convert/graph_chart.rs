@@ -139,9 +139,9 @@ pub fn generate(
         .flatten()
         .ok_or_else(|| anyhow!("'type' attribute not present"))?;
     if chart_type == "pie" {
-        unimplemented!()
+        bail!("Not implemented");
     } else if chart_type.starts_with("stacked") {
-        unimplemented!()
+        bail!("Not implemented");
     }
 
     let tab_file_name = format!("{name}{TAB_EXT}");

@@ -269,6 +269,7 @@ pub async fn run_on_page(
         }
     } else {
         info!("No changes made to page {title}");
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
     if !errors.is_empty() {
         return Err(anyhow::anyhow!(

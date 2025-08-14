@@ -71,6 +71,8 @@ mod number_parse_tests {
         assert_eq!(parse_number("1.5e-2"), Number::from_f64(0.015));
         assert_eq!(parse_number("not a number"), None);
         assert_eq!(parse_number(""), None);
+        assert_eq!(parse_number(".42"), Number::from_f64(0.42));
+        
     }
 }
 

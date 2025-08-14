@@ -39,9 +39,9 @@ impl NodeInnerAttribute {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeInnerParameter {
-    name: String,
-    showkey: bool,
-    value: Option<String>,
+    pub name: String,
+    pub showkey: bool,
+    pub value: Option<String>,
 }
 
 impl NodeInnerParameter {

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use serde_json::{Number, Value};
 use tracing::warn;
 

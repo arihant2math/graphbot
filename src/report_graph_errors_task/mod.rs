@@ -36,7 +36,7 @@ fn generate_wikitext(errors: Vec<graph_failed_conversions::Model>) -> String {
     text.push_str("! scope=\"col\" | Page Title\n");
     text.push_str("! scope=\"col\" | Revision ID\n");
     text.push_str("! scope=\"col\" | Error Message\n");
-    text.push_str("! scope=\"col\" | Date (UTC)\n");
+    text.push_str("! scope=\"col\" | Date Reported (UTC)\n");
     for error in errors {
         text.push_str("|-\n");
         text.push_str(&format!(

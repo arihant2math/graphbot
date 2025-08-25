@@ -21,7 +21,8 @@ Then run the bot:
 3. Setup toolsdb (https://wikitech.wikimedia.org/wiki/Help:Toolforge/ToolsDB)
 4. Create database for graph task in toolsdb
 5. Create `conf/` files.
-6. Run `sh ./scripts/deploy.sh`
+6. Clone graphbot into `~/graphbot`
+7. Run `sh ./scripts/deploy.sh`
 
 ## Deployment on Toolforge
 Run `sh ./scripts/deploy.sh`.

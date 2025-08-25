@@ -7,8 +7,7 @@ use std::{
 use paste::paste;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
-
-use crate::config::Config;
+use graphbot_config::Config;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeInnerAttribute {

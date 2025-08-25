@@ -15,8 +15,7 @@ use tokio::{join, sync::RwLock, task};
 use tracing::error;
 use tracing_appender::{non_blocking, rolling};
 use tracing_subscriber::{EnvFilter, Layer, fmt, layer::SubscriberExt};
-
-use crate::config::Config;
+use graphbot_config::Config;
 
 pub const TAB_EXT: &str = ".tab";
 pub const CHART_EXT: &str = ".chart";

@@ -1,10 +1,7 @@
-use sea_orm::{
-    ActiveModelTrait, ActiveValue, Database, DatabaseConnection, EntityTrait, IntoActiveModel,
-    sqlx::types::chrono,
-};
+use sea_orm::{ActiveModelTrait, ActiveValue, Database, DatabaseConnection, EntityTrait, IntoActiveModel, sqlx::types::chrono, QueryFilter, ColumnTrait};
 use tokio::sync::RwLock;
-
-use crate::{config::Config, rev_info::RevInfo};
+use graphbot_config::Config;
+use crate::{rev_info::RevInfo};
 
 pub struct FailedRevs(DatabaseConnection);
 
@@ -56,6 +53,17 @@ impl FailedRevs {
             graphbot_db::prelude::GraphFailedConversions::find_by_id(rev_info.page_title.clone())
                 .one(&self.0)
                 .await?;
-        Ok(prev.is_some())
+        if let Some(prev) = &prev {
+            if prev.rev_id != rev_info.id as i32 {
+                // If the rev_id is different, delete the entry
+                graphbot_db::prelude::GraphFailedConversions::delete_by_id(rev_info.page_title.clone())
+                    .exec(&self.0)
+                    .await?;
+                return Ok(false);
+            }
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 }

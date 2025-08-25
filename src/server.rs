@@ -11,8 +11,7 @@ use serde_json::{Value, json};
 use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::info;
-
-use crate::config::Config;
+use graphbot_config::Config;
 
 struct AppState {
     config: Arc<RwLock<Config>>,

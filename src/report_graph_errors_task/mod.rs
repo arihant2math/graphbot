@@ -5,8 +5,7 @@ use mwbot::{Bot, SaveOptions};
 use sea_orm::{Database, EntityTrait};
 use tokio::sync::RwLock;
 use tracing::info;
-
-use crate::config::Config;
+use graphbot_config::Config;
 
 const GRAPH_ERRORS_WIKI_PAGE: &str = "User:GraphBot/Conversion Errors";
 

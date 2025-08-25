@@ -13,10 +13,9 @@ use tokio::{
     time::sleep,
 };
 use tracing::{debug, error, info, trace, warn};
-
+use graphbot_config::Config;
 use crate::{
     CHART_EXT, TAB_EXT, api_utils,
-    config::Config,
     failed_revs::FailedRevs,
     parser::{Node, NodeInnerTemplate, call_parser},
     rev_info::RevInfo,

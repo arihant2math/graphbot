@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use sea_orm::ConnectionTrait;
+use sea_orm::{ConnectionTrait, EntityTrait, Schema};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -32,8 +32,8 @@ async fn main() {
         Commands::Db { command } => match command {
             DbCommands::Create => {
                 let config = graphbot_config::Config::load().unwrap();
-                println!("Creating database at {}...", config.database_url);
-                let connection = sea_orm::Database::connect(&config.database_url)
+                println!("Creating database at {}...", config.graph_task.db_url);
+                let connection = sea_orm::Database::connect(&config.graph_task.db_url)
                     .await
                     .expect("Failed to connect to the database");
                 async fn create_table<E: EntityTrait>(connection: &sea_orm::DatabaseConnection, table: E) {
@@ -42,7 +42,7 @@ async fn main() {
                     let sql = backend.build(&schema.create_table_from_entity(table));
                     connection.execute(sql).await.unwrap();
                 }
-                create_table(connection, graphbot_db::graph_failed_conversions::Model).await;
+                create_table(&connection, graphbot_db::graph_failed_conversions::Entity).await;
             }
             DbCommands::Delete => {
                 println!("Deleting database is not implemented yet.");

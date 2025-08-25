@@ -1,7 +1,9 @@
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 
-const SECRET_FILE: &str = "conf/secret.toml";
+const CONF_DIR: &str = "conf/";
+const SECRET_FILE: &str = "secret.toml";
+const MAIN_FILE: &str = "main.toml";
 
 #[derive(Deserialize, Serialize, Debug, Default)]
 struct Secret {
@@ -10,7 +12,6 @@ struct Secret {
     pub client_id: String,
 }
 
-const MAIN_FILE: &str = "conf/main.toml";
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Rpc {
@@ -133,12 +134,28 @@ impl Config {
     }
 
     pub fn load() -> anyhow::Result<Self> {
+        // Find conf directory in current directory or parent directories
+        let mut dir = std::env::current_dir().context("Failed to get current directory")?;
+        loop {
+            if dir.join(CONF_DIR).is_dir() {
+                break;
+            }
+            if !dir.pop() {
+                return Err(anyhow::anyhow!(
+                    "Failed to find conf directory in current or parent directories"
+                ));
+            }
+        }
+        let conf_dir = dir.join(CONF_DIR);
+        let secret_file = conf_dir.join(SECRET_FILE);
+        let main_file = conf_dir.join(MAIN_FILE);
+
         let secret = toml::from_str(
-            &std::fs::read_to_string(SECRET_FILE).context("Failed to open secret config file")?,
+            &std::fs::read_to_string(secret_file).context("Failed to open secret config file")?,
         )
         .context("Failed to parse secret config file")?;
         let main = toml::from_str(
-            &std::fs::read_to_string(MAIN_FILE).context("Failed to open main config file")?,
+            &std::fs::read_to_string(main_file).context("Failed to open main config file")?,
         )
         .context("Failed to parse main config file")?;
         Ok(Self::from_parts(secret, main))

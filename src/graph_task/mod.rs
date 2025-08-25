@@ -281,7 +281,7 @@ pub async fn run_on_page(
             Ok(_) => info!("Successfully updated page {title}"),
             Err(e) => {
                 error!("Failed to update page {title}: {e}");
-                bail!("Failed to update page {title}");
+                bail!("Failed to update page {title}: {e}");
             }
         }
     } else {

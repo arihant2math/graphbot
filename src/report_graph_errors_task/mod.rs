@@ -3,7 +3,7 @@ use std::{path::Path, sync::Arc, time::Duration};
 use graphbot_config::Config;
 use graphbot_db::graph_failed_conversions;
 use mwbot::{Bot, SaveOptions};
-use sea_orm::{Database, EntityTrait};
+use sea_orm::{ConnectOptions, Database, EntityTrait};
 use tokio::sync::RwLock;
 use tracing::info;
 
@@ -42,7 +42,9 @@ pub async fn report_graph_errors_task(
     }
 
     let db_url = config.read().await.graph_task.db_url.clone();
-    let db = Database::connect(&db_url).await?;
+    let mut options = ConnectOptions::new(&db_url);
+    options.max_connections(2);
+    let db = Database::connect(options).await?;
     info!("Starting Report Graph Port Errors task");
     loop {
         if config.read().await.shutdown_graph_task {

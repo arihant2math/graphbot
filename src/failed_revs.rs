@@ -1,9 +1,7 @@
+use std::time::Duration;
 use crate::rev_info::RevInfo;
 use graphbot_config::Config;
-use sea_orm::{
-    ActiveModelTrait, ActiveValue, ColumnTrait, Database, DatabaseConnection, EntityTrait,
-    IntoActiveModel, QueryFilter, sqlx::types::chrono,
-};
+use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, Database, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter, sqlx::types::chrono, ConnectOptions};
 use tokio::sync::RwLock;
 
 pub struct FailedRevs(DatabaseConnection);
@@ -11,7 +9,9 @@ pub struct FailedRevs(DatabaseConnection);
 impl FailedRevs {
     pub async fn load(config: &RwLock<Config>) -> anyhow::Result<Self> {
         let url = config.read().await.graph_task.db_url.clone();
-        let db = Database::connect(&url).await?;
+        let mut options = ConnectOptions::new(&url);
+        options.max_connections(4);
+        let db = Database::connect(options).await?;
         Ok(Self(db))
     }
 

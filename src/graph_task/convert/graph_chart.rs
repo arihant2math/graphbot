@@ -411,9 +411,9 @@ fn gen_pie_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyho
             .unwrap_or_default()
             .map(LocalizableString::en),
         schema: Schema {
-            fields: names.into_iter().map(|value| {
+            fields: names.into_iter().enumerate().map(|(count, value)| {
                 Field {
-                    name: value.clone(),
+                    name: format!("item{count}"),
                     r#type: "number".to_string(),
                     title: Some(LocalizableString::en(value)),
                 }

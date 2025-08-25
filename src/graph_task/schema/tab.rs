@@ -5,6 +5,8 @@ use crate::graph_task::schema::{LocalizableString, MediaWikiCategories};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Field {
+    /// must only consist of letters, numbers, and underscore characters,
+    /// and must not begin with a number
     pub name: String,
     pub r#type: String,
     #[serde(skip_serializing_if = "Option::is_none")]

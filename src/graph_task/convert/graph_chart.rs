@@ -170,11 +170,10 @@ pub fn generate(
             ),
             ..Default::default()
         };
-        bail!("Pie charts are not supported yet");
-        // Ok(ConversionOutput {
-        //     chart,
-        //     tab: gen_pie_tab(tag, source_url)?,
-        // })
+        return Ok(ConversionOutput {
+            chart,
+            tab: gen_pie_tab(tag, source_url)?,
+        })
     } else if chart_type.starts_with("stacked") && &chart_type != "stackedrect" {
         bail!("Non-rect stacked charts are not supported yet by the chart extension");
     }
@@ -287,6 +286,64 @@ fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::R
     };
     Ok(table)
 }
+
+fn gen_pie_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::Result<Tab> {
+    let x_values: Vec<_> = tag
+        .get("x")
+        .cloned()
+        .flatten()
+        .ok_or_else(|| anyhow!("'x' attribute not present"))?
+        .split(',')
+        .map(str::trim)
+        .map(|s| convert_graph_chart_value(s, "string"))
+        .collect();
+    if tag.contains_key("y2") {
+        bail!("Pie charts cannot have y2");
+    }
+    let y_key = if tag.contains_key("y") {
+        "y"
+    } else if tag.contains_key("y1") {
+        "y1"
+    } else {
+        bail!("Neither 'y' nor 'y1' present");
+    };
+    let y_values: Vec<Vec<_>> = tag.get(y_key)
+            .cloned()
+            .flatten()
+            .ok_or_else(|| anyhow!("'y' attribute not present"))?
+            .split(',')
+            .map(str::trim)
+            .map(|s| vec![convert_graph_chart_value(s, "integer")])
+            .collect();
+    let table = Tab {
+        license: LICENSE.to_string(),
+        sources: Some(source_url.to_string()),
+        description: tag
+            .get("description")
+            .cloned()
+            .unwrap_or_default()
+            .map(LocalizableString::en),
+        schema: gen_fields(tag, "string", "integer").into(),
+        data: x_values
+            .into_iter()
+            .enumerate()
+            .map(|(count, v)| {
+                let mut out = vec![v];
+                for y_value in &y_values {
+                    if count < y_value.len() {
+                        out.push(y_value[count].clone());
+                    } else {
+                        out.push(Value::Null);
+                    }
+                }
+                out
+            })
+            .collect(),
+        ..Default::default()
+    };
+    Ok(table)
+}
+
 
 fn gen_fields(tag: &HashMap<String, Option<String>>, x_type: &str, y_type: &str) -> Vec<Field> {
     let mut fields = vec![Field {

@@ -168,7 +168,7 @@ pub fn generate(
         .get("type")
         .cloned()
         .flatten()
-        .ok_or_else(|| anyhow!("'type' attribute not present"))?;
+        .unwrap_or("line".to_string());
     let tab_file_name = format!("{name}{TAB_EXT}");
 
     macro_rules! gen_axis {

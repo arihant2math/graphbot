@@ -12,30 +12,12 @@ const GRAPH_ERRORS_WIKI_PAGE: &str = "User:GraphBot/Conversion Errors";
 fn generate_wikitext(errors: Vec<graph_failed_conversions::Model>) -> String {
     let prelude = "This table lists the pages with graphs that GraphBot could not convert to charts, along with the error messages.\n\n";
     let mut text = String::from(prelude);
-    // {| class="wikitable sortable collapsible" border="1"
-    // |+ Sortable and collapsible table
-    // |-
-    // ! scope="col" | Alphabetic
-    // ! scope="col" | Numeric
-    // ! scope="col" | Date
-    // ! scope="col" class="unsortable" | Unsortable
-    // |-
-    // | d || 20 || 2008-11-24 || This
-    // |-
-    // | b || 8 || 2004-03-01 || column
-    // |-
-    // | a || 6 || 1979-07-23 || cannot
-    // |-
-    // | c || 4 || 1492-12-08 || be
-    // |-
-    // | e || 0 || 1601-08-13 || sorted.
-    // |}
     text.push_str("{| class=\"wikitable sortable collapsible\" border=\"1\"\n");
     text.push_str("|+ Conversion Errors\n");
     text.push_str("|-\n");
     text.push_str("! scope=\"col\" | Page Title\n");
     text.push_str("! scope=\"col\" | Revision ID\n");
-    text.push_str("! scope=\"col\" | Error Message\n");
+    text.push_str("! scope=\"col\" class=\"unsortable\" | Error Message\n");
     text.push_str("! scope=\"col\" | Date Reported (UTC)\n");
     for error in errors {
         text.push_str("|-\n");

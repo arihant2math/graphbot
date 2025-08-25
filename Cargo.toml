@@ -4,7 +4,6 @@ members = [
     "graphbot-config",
     "graphbot-db"
 ]
-exclude = ["migration"]
 
 [workspace.dependencies]
 anyhow = "1.0"

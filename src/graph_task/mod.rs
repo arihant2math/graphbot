@@ -1,7 +1,14 @@
 use std::{sync::Arc, time::Duration};
 
+use crate::{
+    CHART_EXT, TAB_EXT, api_utils,
+    failed_revs::FailedRevs,
+    parser::{Node, NodeInnerTemplate, call_parser},
+    rev_info::RevInfo,
+};
 use anyhow::{Context, bail};
 use convert::gen_graph_chart;
+use graphbot_config::Config;
 use mwbot::{
     Bot, Page, SaveOptions,
     generators::{CategoryMemberSort, CategoryMembers, Generator},
@@ -13,13 +20,6 @@ use tokio::{
     time::sleep,
 };
 use tracing::{debug, error, info, trace, warn};
-use graphbot_config::Config;
-use crate::{
-    CHART_EXT, TAB_EXT, api_utils,
-    failed_revs::FailedRevs,
-    parser::{Node, NodeInnerTemplate, call_parser},
-    rev_info::RevInfo,
-};
 
 mod convert;
 pub mod schema;

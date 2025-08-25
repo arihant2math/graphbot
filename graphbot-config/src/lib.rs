@@ -12,7 +12,6 @@ struct Secret {
     pub client_id: String,
 }
 
-
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Rpc {
     pub host: String,

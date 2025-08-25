@@ -1,9 +1,10 @@
-use std::collections::HashMap;
-use std::fmt::Display;
 use anyhow::{anyhow, bail};
 use serde_json::{Number, Value};
+use std::collections::HashMap;
+use std::fmt::Display;
 use tracing::warn;
 
+use crate::graph_task::schema::tab::Schema;
 use crate::{
     TAB_EXT,
     graph_task::{
@@ -15,7 +16,6 @@ use crate::{
         },
     },
 };
-use crate::graph_task::schema::tab::Schema;
 
 const LICENSE: &str = "CC-BY-SA-4.0";
 
@@ -169,7 +169,7 @@ pub fn generate(
         .cloned()
         .flatten()
         .ok_or_else(|| anyhow!("'type' attribute not present"))?;
-        let tab_file_name = format!("{name}{TAB_EXT}");
+    let tab_file_name = format!("{name}{TAB_EXT}");
 
     macro_rules! gen_axis {
         ($tag:expr, $name:expr) => {
@@ -202,7 +202,7 @@ pub fn generate(
         return Ok(ConversionOutput {
             chart,
             tab: gen_pie_tab(tag, source_url)?,
-        })
+        });
     } else if chart_type.starts_with("stacked") && &chart_type != "stackedrect" {
         bail!("Non-rect stacked charts are not supported yet by the chart extension");
     }
@@ -228,19 +228,43 @@ pub fn generate(
     })
 }
 
+fn detect_type(s: &str) -> Option<ValueType> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let strings: Vec<_> = s.split(",").map(str::trim).collect();
+    let mut number = true;
+    for item in &strings {
+        if parse_number(item).is_none() {
+            number = false;
+            break;
+        }
+    }
+    if number {
+        Some(ValueType::Number)
+    } else {
+        Some(ValueType::String)
+    }
+}
+
 fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::Result<Tab> {
-    let x_type = convert_graph_types(
-        &tag.get("xType")
-            .cloned()
-            .unwrap_or_default()
-            .ok_or_else(|| anyhow!("'xType' attribute not present"))?,
-    );
-    let y_type = convert_graph_types(
-        &tag.get("yType")
-            .cloned()
-            .unwrap_or_default()
-            .ok_or_else(|| anyhow!("'yType' attribute not present"))?,
-    );
+    let x_type = if let Some(ty) = tag.get("xType").cloned().unwrap_or_default() {
+        convert_graph_types(&ty)
+    } else {
+        detect_type(
+            &tag.get("x")
+                .cloned()
+                .flatten()
+                .ok_or_else(|| anyhow!("'x' attribute not present"))?,
+        )
+        .ok_or_else(|| anyhow!("Cannot infer xType"))?
+    };
+    let y_type = if let Some(ty) = tag.get("yType").cloned().unwrap_or_default() {
+        convert_graph_types(&ty)
+    } else {
+        ValueType::Number
+    };
 
     let x_values: Vec<_> = tag
         .get("x")
@@ -314,7 +338,11 @@ fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::R
     Ok(table)
 }
 
-fn gen_fields(tag: &HashMap<String, Option<String>>, x_type: ValueType, y_type: ValueType) -> Vec<Field> {
+fn gen_fields(
+    tag: &HashMap<String, Option<String>>,
+    x_type: ValueType,
+    y_type: ValueType,
+) -> Vec<Field> {
     let mut fields = vec![Field {
         name: "x".to_string(),
         r#type: x_type.to_string(),
@@ -394,7 +422,8 @@ fn gen_pie_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyho
     } else {
         bail!("Neither 'y' nor 'y1' present");
     };
-    let y_values: Vec<_> = tag.get(y_key)
+    let y_values: Vec<_> = tag
+        .get(y_key)
         .cloned()
         .flatten()
         .ok_or_else(|| anyhow!("'{y_key}' attribute not present"))?
@@ -411,17 +440,18 @@ fn gen_pie_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyho
             .unwrap_or_default()
             .map(LocalizableString::en),
         schema: Schema {
-            fields: names.into_iter().enumerate().map(|(count, value)| {
-                Field {
+            fields: names
+                .into_iter()
+                .enumerate()
+                .map(|(count, value)| Field {
                     name: format!("item{count}"),
                     r#type: "number".to_string(),
                     title: Some(LocalizableString::en(value)),
-                }
-            }).collect()
+                })
+                .collect(),
         },
         data: vec![y_values],
         ..Default::default()
     };
     Ok(table)
 }
-

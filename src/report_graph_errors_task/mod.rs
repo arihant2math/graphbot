@@ -1,11 +1,11 @@
 use std::{path::Path, sync::Arc, time::Duration};
 
+use graphbot_config::Config;
 use graphbot_db::graph_failed_conversions;
 use mwbot::{Bot, SaveOptions};
 use sea_orm::{Database, EntityTrait};
 use tokio::sync::RwLock;
 use tracing::info;
-use graphbot_config::Config;
 
 const GRAPH_ERRORS_WIKI_PAGE: &str = "User:GraphBot/Conversion Errors";
 

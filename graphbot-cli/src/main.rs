@@ -21,7 +21,7 @@ enum Commands {
 enum DbCommands {
     /// Create a new database
     Create,
-    Delete
+    Delete,
 }
 
 #[tokio::main]
@@ -36,7 +36,10 @@ async fn main() {
                 let connection = sea_orm::Database::connect(&config.graph_task.db_url)
                     .await
                     .expect("Failed to connect to the database");
-                async fn create_table<E: EntityTrait>(connection: &sea_orm::DatabaseConnection, table: E) {
+                async fn create_table<E: EntityTrait>(
+                    connection: &sea_orm::DatabaseConnection,
+                    table: E,
+                ) {
                     let backend = connection.get_database_backend();
                     let schema = Schema::new(backend);
                     let sql = backend.build(&schema.create_table_from_entity(table));

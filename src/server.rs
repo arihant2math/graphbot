@@ -7,11 +7,11 @@ use axum::{
     response::IntoResponse,
     routing::get,
 };
+use graphbot_config::Config;
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::info;
-use graphbot_config::Config;
 
 struct AppState {
     config: Arc<RwLock<Config>>,

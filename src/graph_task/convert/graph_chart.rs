@@ -15,6 +15,7 @@ use crate::{
         },
     },
 };
+use crate::graph_task::schema::tab::Schema;
 
 const LICENSE: &str = "CC-BY-SA-4.0";
 
@@ -314,64 +315,6 @@ fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::R
     Ok(table)
 }
 
-fn gen_pie_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::Result<Tab> {
-    let x_values: Vec<_> = tag
-        .get("x")
-        .cloned()
-        .flatten()
-        .ok_or_else(|| anyhow!("'x' attribute not present"))?
-        .split(',')
-        .map(str::trim)
-        .map(|s| convert_graph_chart_value(s, ValueType::String))
-        .collect();
-    if tag.contains_key("y2") {
-        bail!("Pie charts cannot have y2");
-    }
-    let y_key = if tag.contains_key("y") {
-        "y"
-    } else if tag.contains_key("y1") {
-        "y1"
-    } else {
-        bail!("Neither 'y' nor 'y1' present");
-    };
-    let y_values: Vec<Vec<_>> = tag.get(y_key)
-            .cloned()
-            .flatten()
-            .ok_or_else(|| anyhow!("'y' attribute not present"))?
-            .split(',')
-            .map(str::trim)
-            .map(|s| vec![convert_graph_chart_value(s, ValueType::Number)])
-            .collect();
-    let table = Tab {
-        license: LICENSE.to_string(),
-        sources: Some(source_url.to_string()),
-        description: tag
-            .get("description")
-            .cloned()
-            .unwrap_or_default()
-            .map(LocalizableString::en),
-        schema: gen_fields(tag, ValueType::String, ValueType::Number).into(),
-        data: x_values
-            .into_iter()
-            .enumerate()
-            .map(|(count, v)| {
-                let mut out = vec![v];
-                for y_value in &y_values {
-                    if count < y_value.len() {
-                        out.push(y_value[count].clone());
-                    } else {
-                        out.push(Value::Null);
-                    }
-                }
-                out
-            })
-            .collect(),
-        ..Default::default()
-    };
-    Ok(table)
-}
-
-
 fn gen_fields(tag: &HashMap<String, Option<String>>, x_type: ValueType, y_type: ValueType) -> Vec<Field> {
     let mut fields = vec![Field {
         name: "x".to_string(),
@@ -431,3 +374,55 @@ fn gen_fields(tag: &HashMap<String, Option<String>>, x_type: ValueType, y_type: 
     }
     fields
 }
+
+fn gen_pie_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::Result<Tab> {
+    let names: Vec<_> = tag
+        .get("x")
+        .cloned()
+        .flatten()
+        .ok_or_else(|| anyhow!("'x' attribute not present"))?
+        .split(',')
+        .map(str::trim)
+        .map(str::to_string)
+        .collect();
+    if tag.contains_key("y2") {
+        bail!("Pie charts cannot have y2");
+    }
+    let y_key = if tag.contains_key("y") {
+        "y"
+    } else if tag.contains_key("y1") {
+        "y1"
+    } else {
+        bail!("Neither 'y' nor 'y1' present");
+    };
+    let y_values: Vec<_> = tag.get(y_key)
+        .cloned()
+        .flatten()
+        .ok_or_else(|| anyhow!("'{y_key}' attribute not present"))?
+        .split(',')
+        .map(str::trim)
+        .map(|s| convert_graph_chart_value(s, ValueType::Number))
+        .collect();
+    let table = Tab {
+        license: LICENSE.to_string(),
+        sources: Some(source_url.to_string()),
+        description: tag
+            .get("description")
+            .cloned()
+            .unwrap_or_default()
+            .map(LocalizableString::en),
+        schema: Schema {
+            fields: names.into_iter().map(|value| {
+                Field {
+                    name: value.clone(),
+                    r#type: "number".to_string(),
+                    title: Some(LocalizableString::en(value)),
+                }
+            }).collect()
+        },
+        data: vec![y_values],
+        ..Default::default()
+    };
+    Ok(table)
+}
+

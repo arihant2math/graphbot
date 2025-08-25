@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-
+use std::fmt::Display;
 use anyhow::{anyhow, bail};
 use serde_json::{Number, Value};
 use tracing::warn;
@@ -32,11 +32,31 @@ fn convert_graph_chart_type(s: &str) -> ChartType {
     }
 }
 
-fn convert_graph_types(s: &str) -> &str {
-    match s {
-        "integer" | "number" => "number",
-        "date" | "string" => "string",
-        _ => "string",
+#[derive(Debug, Clone, Copy)]
+enum ValueType {
+    Number,
+    String,
+    Bool,
+}
+
+impl Display for ValueType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValueType::Number => write!(f, "number"),
+            ValueType::String => write!(f, "string"),
+            ValueType::Bool => write!(f, "boolean"),
+        }
+    }
+}
+
+fn convert_graph_types(s: &str) -> ValueType {
+    match s.to_lowercase().as_str() {
+        "integer" | "number" => ValueType::Number,
+        "date" | "string" => ValueType::String,
+        _ => {
+            warn!("Unknown type '{s}', defaulting to 'number'.");
+            ValueType::Number
+        }
     }
 }
 
@@ -77,20 +97,29 @@ mod number_parse_tests {
 }
 
 // TODO: ty should be an enum
-fn convert_graph_chart_value(value: &str, ty: &str) -> Value {
+fn convert_graph_chart_value(value: &str, ty: ValueType) -> Value {
     if value.is_empty() {
         return Value::Null;
     }
     match ty {
-        "number" => {
+        ValueType::Number => {
             if let Some(num) = parse_number(value) {
                 Value::Number(num)
             } else {
                 Value::String(value.to_string())
             }
         }
-        "string" => Value::String(value.to_string()),
-        _ => Value::String(value.to_string()),
+        ValueType::String => Value::String(value.to_string()),
+        ValueType::Bool => {
+            let lower = value.to_lowercase();
+            if lower == "true" || lower == "1" {
+                Value::Bool(true)
+            } else if lower == "false" || lower == "0" {
+                Value::Bool(false)
+            } else {
+                Value::String(value.to_string())
+            }
+        }
     }
 }
 
@@ -205,15 +234,13 @@ fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::R
             .cloned()
             .unwrap_or_default()
             .unwrap_or("number".to_string()), // TODO: Need to check actual type
-    )
-    .to_string();
+    );
     let y_type = convert_graph_types(
         &tag.get("yType")
             .cloned()
             .unwrap_or_default()
             .unwrap_or("number".to_string()),
-    )
-    .to_string();
+    );
 
     let x_values: Vec<_> = tag
         .get("x")
@@ -222,7 +249,7 @@ fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::R
         .ok_or_else(|| anyhow!("'x' attribute not present"))?
         .split(',')
         .map(str::trim)
-        .map(|s| convert_graph_chart_value(s, &x_type))
+        .map(|s| convert_graph_chart_value(s, x_type))
         .collect();
     let y_values: Vec<Vec<_>> = if tag.contains_key("y") {
         vec![
@@ -232,7 +259,7 @@ fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::R
                 .ok_or_else(|| anyhow!("'y' attribute not present"))?
                 .split(',')
                 .map(str::trim)
-                .map(|s| convert_graph_chart_value(s, &y_type))
+                .map(|s| convert_graph_chart_value(s, y_type))
                 .collect(),
         ]
     } else {
@@ -251,7 +278,7 @@ fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::R
             let values_for_y: Vec<_> = y_values
                 .split(',')
                 .map(str::trim)
-                .map(|s| convert_graph_chart_value(s, &y_type))
+                .map(|s| convert_graph_chart_value(s, y_type))
                 .collect();
             values.push(values_for_y);
             counter += 1;
@@ -266,7 +293,7 @@ fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::R
             .cloned()
             .unwrap_or_default()
             .map(LocalizableString::en),
-        schema: gen_fields(tag, &x_type, &y_type).into(),
+        schema: gen_fields(tag, x_type, y_type).into(),
         data: x_values
             .into_iter()
             .enumerate()
@@ -295,7 +322,7 @@ fn gen_pie_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyho
         .ok_or_else(|| anyhow!("'x' attribute not present"))?
         .split(',')
         .map(str::trim)
-        .map(|s| convert_graph_chart_value(s, "string"))
+        .map(|s| convert_graph_chart_value(s, ValueType::String))
         .collect();
     if tag.contains_key("y2") {
         bail!("Pie charts cannot have y2");
@@ -313,7 +340,7 @@ fn gen_pie_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyho
             .ok_or_else(|| anyhow!("'y' attribute not present"))?
             .split(',')
             .map(str::trim)
-            .map(|s| vec![convert_graph_chart_value(s, "integer")])
+            .map(|s| vec![convert_graph_chart_value(s, ValueType::Number)])
             .collect();
     let table = Tab {
         license: LICENSE.to_string(),
@@ -323,7 +350,7 @@ fn gen_pie_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyho
             .cloned()
             .unwrap_or_default()
             .map(LocalizableString::en),
-        schema: gen_fields(tag, "string", "integer").into(),
+        schema: gen_fields(tag, ValueType::String, ValueType::Number).into(),
         data: x_values
             .into_iter()
             .enumerate()
@@ -345,7 +372,7 @@ fn gen_pie_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyho
 }
 
 
-fn gen_fields(tag: &HashMap<String, Option<String>>, x_type: &str, y_type: &str) -> Vec<Field> {
+fn gen_fields(tag: &HashMap<String, Option<String>>, x_type: ValueType, y_type: ValueType) -> Vec<Field> {
     let mut fields = vec![Field {
         name: "x".to_string(),
         r#type: x_type.to_string(),

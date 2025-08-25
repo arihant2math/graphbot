@@ -190,7 +190,6 @@ async fn handle_template(
 
             let name = name
                 .ok_or_else(|| anyhow::anyhow!("'name' parameter is required to port the graph"))?;
-            // TODO: add section support
             let rev_url = if let Some(rev_info) = rev_info {
                 format!(
                     "{}w/index.php?title={}&oldid={}",

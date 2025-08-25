@@ -97,7 +97,6 @@ mod number_parse_tests {
     }
 }
 
-// TODO: ty should be an enum
 fn convert_graph_chart_value(value: &str, ty: ValueType) -> Value {
     if value.is_empty() {
         return Value::Null;
@@ -234,13 +233,13 @@ fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::R
         &tag.get("xType")
             .cloned()
             .unwrap_or_default()
-            .unwrap_or("number".to_string()), // TODO: Need to check actual type
+            .ok_or_else(|| anyhow!("'xType' attribute not present"))?,
     );
     let y_type = convert_graph_types(
         &tag.get("yType")
             .cloned()
             .unwrap_or_default()
-            .unwrap_or("number".to_string()),
+            .ok_or_else(|| anyhow!("'yType' attribute not present"))?,
     );
 
     let x_values: Vec<_> = tag

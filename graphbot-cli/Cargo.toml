@@ -1,0 +1,11 @@
+[package]
+name = "graphbot-cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.0", features = ["derive"] }
+graphbot-config = { path = "../graphbot-config" }
+graphbot-db = { path = "../graphbot-db" }
+sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
+tokio = { workspace = true }

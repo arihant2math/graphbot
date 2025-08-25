@@ -1,5 +1,4 @@
 mod api_utils;
-mod config;
 mod failed_revs;
 mod graph_task;
 mod parser;

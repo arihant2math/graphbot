@@ -43,7 +43,7 @@ pub async fn report_graph_errors_task(
 
     let db_url = config.read().await.graph_task.db_url.clone();
     let mut options = ConnectOptions::new(&db_url);
-    options.max_connections(2);
+    options.max_connections(4);
     let db = Database::connect(options).await?;
     info!("Starting Report Graph Port Errors task");
     loop {

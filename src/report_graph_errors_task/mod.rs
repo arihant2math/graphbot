@@ -5,7 +5,7 @@ use graphbot_db::graph_failed_conversions;
 use mwbot::{Bot, SaveOptions};
 use sea_orm::{ConnectOptions, Database, EntityTrait};
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{debug, info};
 
 const GRAPH_ERRORS_WIKI_PAGE: &str = "User:GraphBot/Conversion Errors";
 

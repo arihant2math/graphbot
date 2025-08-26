@@ -355,10 +355,8 @@ pub async fn graph_task(
         error!("Parser failed to parse empty string, are you sure the server is running? {e}");
         return Err(e);
     }
-
-    let failed_revs = Arc::new(FailedRevs::load(&config).await?);
-
     info!("Starting Graph Port task");
+    let failed_revs = Arc::new(FailedRevs::load(&config).await?);
 
     // Create workers
     let (page_sender, page_reciever) = mpsc::channel(100);

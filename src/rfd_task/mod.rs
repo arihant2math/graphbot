@@ -119,6 +119,7 @@ mod tests {
 }
 
 pub async fn rfd_task(wiki_bot: Arc<Bot>, config: Arc<RwLock<Config>>) -> anyhow::Result<()> {
+    info!("Starting RFD task");
     loop {
         if config.read().await.shutdown_rfd_task {
             info!("Shutdown flag is set, exiting.");

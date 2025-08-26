@@ -37,6 +37,7 @@ pub async fn report_graph_errors_task(
     wiki_bot: Arc<Bot>,
     config: Arc<RwLock<Config>>,
 ) -> anyhow::Result<()> {
+    info!("Starting Report Graph Port Errors task");
     while !Path::new("db/graph.db").exists() {
         tokio::time::sleep(Duration::from_secs(10)).await;
     }
@@ -45,7 +46,7 @@ pub async fn report_graph_errors_task(
     let mut options = ConnectOptions::new(&db_url);
     options.max_connections(4);
     let db = Database::connect(options).await?;
-    info!("Starting Report Graph Port Errors task");
+    debug!("Connected to database");
     loop {
         if config.read().await.shutdown_graph_task {
             info!("Shutdown flag is set, exiting.");

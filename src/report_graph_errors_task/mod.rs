@@ -38,12 +38,10 @@ pub async fn report_graph_errors_task(
     config: Arc<RwLock<Config>>,
 ) -> anyhow::Result<()> {
     info!("Starting Report Graph Port Errors task");
-    while !Path::new("db/graph.db").exists() {
-        tokio::time::sleep(Duration::from_secs(10)).await;
-    }
-
     let db_url = config.read().await.graph_task.db_url.clone();
-    let db = Database::connect(&db_url).await?;
+    let mut options = ConnectOptions::new(&db_url);
+    options.max_connections(4);
+    let db = Database::connect(options).await?;
     debug!("Connected to database");
     loop {
         if config.read().await.shutdown_graph_task {

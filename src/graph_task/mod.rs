@@ -13,6 +13,7 @@ use mwbot::{
     Bot, Page, SaveOptions,
     generators::{CategoryMemberSort, CategoryMembers, Generator},
 };
+use sea_orm::Iden;
 use tokio::{
     sync::{Mutex, RwLock, mpsc, mpsc::Receiver, oneshot, oneshot::Sender},
     task,
@@ -114,6 +115,35 @@ async fn create_pages(
     Ok(format!("{}{inside}{}", "{{", "}}"))
 }
 
+fn trim_comments(s: &str) -> String {
+    if s.contains("<!--") && s.contains("-->") {
+        let mut new_value = s.to_string();
+        while let Some(start) = new_value.find("<!--") {
+            if let Some(end) = new_value[start + 4..].find("-->") {
+                new_value.replace_range(start..start + 4 + end + 3, "");
+            } else {
+                break;
+            }
+        }
+        return new_value;
+    }
+    s.to_string()
+}
+
+#[test]
+fn test_trim_comments() {
+    let s = "This is a test <!-- comment --> string.";
+    assert_eq!(trim_comments(s), "This is a test  string.");
+    let s = "No comments here.";
+    assert_eq!(trim_comments(s), "No comments here.");
+    let s = "Multiple <!-- first --> comments <!-- second --> here.";
+    assert_eq!(trim_comments(s), "Multiple  comments  here.");
+    let s = "Unclosed <!-- comment here.";
+    assert_eq!(trim_comments(s), "Unclosed <!-- comment here.");
+    let s = "--> No opening comment.";
+    assert_eq!(trim_comments(s), "--> No opening comment.");
+}
+
 #[tracing::instrument(skip(bot, parsed, page, rev_info, config))]
 async fn handle_template(
     bot: &Bot,
@@ -130,6 +160,10 @@ async fn handle_template(
         .map(|mut param| {
             param.name = param.name.trim().to_string();
             param.value = param.value.clone().map(|v| v.trim().to_string());
+            // Find and remove any html comments
+            if let Some(ref v) = param.value {
+                param.value = Some(trim_comments(v));
+            }
             param
         })
         .collect();

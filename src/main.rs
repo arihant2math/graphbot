@@ -121,11 +121,9 @@ async fn main() -> anyhow::Result<()> {
         }
     });
     let report_graph_errors_task = task::spawn({
-        dbg!();
         let wiki_bot = Arc::clone(&wiki_bot);
         let config = Arc::clone(&config);
         async move {
-            dbg!();
             if let Err(e) =
                 report_graph_errors_task::report_graph_errors_task(wiki_bot, config).await
             {

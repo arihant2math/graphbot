@@ -37,6 +37,7 @@ pub async fn report_graph_errors_task(
     wiki_bot: Arc<Bot>,
     config: Arc<RwLock<Config>>,
 ) -> anyhow::Result<()> {
+    dbg!();
     info!("Starting Report Graph Port Errors task");
     while !Path::new("db/graph.db").exists() {
         tokio::time::sleep(Duration::from_secs(10)).await;

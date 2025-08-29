@@ -1,8 +1,11 @@
-use std::time::Duration;
-use crate::rev_info::RevInfo;
 use graphbot_config::Config;
-use sea_orm::{ActiveModelTrait, ActiveValue, ColumnTrait, Database, DatabaseConnection, EntityTrait, IntoActiveModel, QueryFilter, sqlx::types::chrono, ConnectOptions};
+use sea_orm::{
+    ActiveModelTrait, ActiveValue, ConnectOptions, Database, DatabaseConnection, EntityTrait,
+    IntoActiveModel, sqlx::types::chrono,
+};
 use tokio::sync::RwLock;
+
+use crate::rev_info::RevInfo;
 
 pub struct FailedRevs(DatabaseConnection);
 

@@ -1,12 +1,11 @@
 use std::{sync::Arc, time::Duration};
 
-use crate::parser;
 use graphbot_config::Config;
-use mwapi_responses::query;
 use mwbot::Bot;
-use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use tracing::info;
+
+use crate::parser;
 
 const MAIN_RFD_PAGE: &str = "Wikipedia:Redirects for discussion";
 
@@ -88,11 +87,12 @@ async fn inference(rfd: Rfd, wiki_bot: &Bot) -> anyhow::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::{COMMONS_API_URL, COMMONS_REST_URL, USER_AGENT};
     use graphbot_config::Config;
     use mwbot::Bot;
     use tokio::join;
+
+    use super::*;
+    use crate::{COMMONS_API_URL, COMMONS_REST_URL, USER_AGENT};
 
     #[tokio::test]
     async fn test_inference() {

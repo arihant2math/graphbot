@@ -1,10 +1,9 @@
+use std::{collections::HashMap, fmt::Display};
+
 use anyhow::{anyhow, bail};
 use serde_json::{Number, Value};
-use std::collections::HashMap;
-use std::fmt::Display;
 use tracing::warn;
 
-use crate::graph_task::schema::tab::Schema;
 use crate::{
     TAB_EXT,
     graph_task::{
@@ -12,7 +11,7 @@ use crate::{
         schema::{
             LocalizableString,
             chart::{Axis, Chart, ChartType},
-            tab::{Field, Tab},
+            tab::{Field, Schema, Tab},
         },
     },
 };

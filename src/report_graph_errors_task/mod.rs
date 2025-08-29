@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use graphbot_config::Config;
 use graphbot_db::graph_failed_conversions;

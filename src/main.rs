@@ -65,8 +65,7 @@ fn init_logging(_config: &RwLock<Config>) -> non_blocking::WorkerGuard {
 }
 
 const COMMONS_BASE_URL: &str = "https://commons.wikimedia.org/";
-const COMMONS_API_URL: &str = "https://commons.wikimedia.org/w/api.php";
-const COMMONS_REST_URL: &str = "https://commons.wikimedia.org/api/rest_v1";
+const COMMONS_API_URL: &str = "https://commons.wikimedia.org/w/";
 
 const USER_AGENT: &str = "GraphBot/1";
 
@@ -74,24 +73,22 @@ const USER_AGENT: &str = "GraphBot/1";
 async fn main() -> anyhow::Result<()> {
     let config = RwLock::new(Config::load()?);
     let url = url::Url::parse(&config.read().await.wiki)?;
-    let api_url = url.join("w/api.php")?;
-    let rest_url = url.join("api/rest_v1")?;
+    let api_url = url.join("w/")?;
     // Read the config file
     let _guard = init_logging(&config);
     let token = config.read().await.access_token.clone();
     let init_bots_span = tracing::debug_span!("init_bots").entered();
-    let wiki_bot_future = Bot::builder(api_url.to_string(), rest_url.to_string())
+    let wiki_bot_future = Bot::builder(api_url.to_string())
         .set_user_agent(USER_AGENT.to_string())
         .set_mark_as_bot(true)
         .set_oauth2_token(config.read().await.username.clone(), token.clone())
         .build();
 
-    let commons_bot_future =
-        Bot::builder(COMMONS_API_URL.to_string(), COMMONS_REST_URL.to_string())
-            .set_user_agent(USER_AGENT.to_string())
-            .set_mark_as_bot(true)
-            .set_oauth2_token(config.read().await.username.clone(), token)
-            .build();
+    let commons_bot_future = Bot::builder(COMMONS_API_URL.to_string())
+        .set_user_agent(USER_AGENT.to_string())
+        .set_mark_as_bot(true)
+        .set_oauth2_token(config.read().await.username.clone(), token)
+        .build();
     let (wiki_bot, commons_bot) = join!(wiki_bot_future, commons_bot_future);
     let wiki_bot = wiki_bot.context("Failed to initialize wiki bot")?;
     let commons_bot = commons_bot.context("Failed to initialize commons bot")?;

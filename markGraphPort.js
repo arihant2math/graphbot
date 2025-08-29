@@ -54,16 +54,17 @@ mw.loader.using(['mediawiki.util', 'mediawiki.api'], function () {
         if (name.includes("|") || name.includes("{") || name.includes("}") || name.includes("[") || name.includes("]" || name.includes("//"))) {
             throw new Error("Name contains invalid character(s)");
         }
-        let urlEdName = name.replace(' ', '_');
-        let url = `https://commons.wikimedia.org/w/api.php?action=query&titles=Data:${urlEdName}.chart|Data:${urlEdName}.tab&format=json`;
-        let response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-        });
-        let data = await response.json();
-        console.log(data);
+        // let urlEdName = name.replace(' ', '_');
+        // let url = `https://commons.wikimedia.org/w/api.php?action=query&titles=Data:${urlEdName}.chart|Data:${urlEdName}.tab&format=json`;
+        // let response = await fetch(url, {
+        //     method: 'GET',
+        //     headers: {
+        //         'Access-Control-Allow-Origin': '*',
+        //         'Content-Type': 'application/json'
+        //     },
+        // });
+        // let data = await response.json();
+        // console.log(data);
         // TODO: Validate that those pages do not exist on commons
         let pageid = config.wgArticleId;
         new mw.Api().get({

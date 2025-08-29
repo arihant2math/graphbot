@@ -115,6 +115,7 @@ impl Config {
         }
     }
 
+    #[expect(unused)]
     fn into_parts(self) -> (Secret, Main) {
         (
             Secret {

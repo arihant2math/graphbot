@@ -42,6 +42,18 @@ mw.loader.using(['mediawiki.util', 'mediawiki.api'], function () {
         if (name.length < 3) {
             throw new Error("Name is too short");
         }
+        if (name.endsWith(".chart") || name.endsWith(".tab")) {
+            throw new Error("Name should not include file extension");
+        }
+        if (name.startsWith("Data:")) {
+            throw new Error("Name should not include 'Data:' prefix");
+        }
+        if (name.includes(":")) {
+            throw new Error("Name should not include namespace prefix");
+        }
+        if (name.includes("|") || name.includes("{") || name.includes("}") || name.includes("[") || name.includes("]" || name.includes("//"))) {
+            throw new Error("Name contains invalid character(s)");
+        }
         let urlEdName = name.replace(' ', '_');
         let url = `https://commons.wikimedia.org/w/api.php?action=query&titles=Data:${urlEdName}.chart|Data:${urlEdName}.tab&format=json`;
         let response = await fetch(url, {
@@ -52,8 +64,8 @@ mw.loader.using(['mediawiki.util', 'mediawiki.api'], function () {
         });
         let data = await response.json();
         console.log(data);
+        // TODO: Validate that those pages do not exist on commons
         let pageid = config.wgArticleId;
-        // TODO: more validation
         new mw.Api().get({
             action: 'parse',
             pageid: pageid,
@@ -84,7 +96,7 @@ mw.loader.using(['mediawiki.util', 'mediawiki.api'], function () {
                     action: 'edit',
                     pageid: pageid,
                     text: redone,
-                    summary: 'Marked [[Special:Graph/' + config.wgPageName + '|Graph]] for porting',
+                    summary: 'Marked [[Help:Graph|Graph]] for porting',
                 }).done(function (response) {
                     console.log(response);
                     if (response.edit && response.edit.result === 'Success') {

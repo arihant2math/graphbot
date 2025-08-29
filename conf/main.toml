@@ -1,0 +1,11 @@
+username = "GraphBot"
+wiki = "https://en.wikipedia.org/"
+
+[graph_task]
+db_url = "mysql://s56792:twcaSbTtYUDv2sld@localhost:3306/s56792__graph"
+search_category = "Category:Graphs_to_Port"
+
+[rpc]
+host = "localhost"
+port = 8000
+path = "/RPC2"

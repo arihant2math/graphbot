@@ -32,7 +32,7 @@ mw.loader.using(['mediawiki.util', 'mediawiki.api'], function () {
         }
     });
 
-    function portGraphInner(number, name) {
+    async function portGraphInner(number, name) {
         if (!name) {
             throw new Error("Name is required");
         }
@@ -42,6 +42,16 @@ mw.loader.using(['mediawiki.util', 'mediawiki.api'], function () {
         if (name.length < 3) {
             throw new Error("Name is too short");
         }
+        let urlEdName = name.replace(' ', '_');
+        let url = `https://commons.wikimedia.org/w/api.php?action=query&titles=Data:${urlEdName}.chart|Data:${urlEdName}.tab&format=json`;
+        let response = await fetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+        });
+        let data = await response.json();
+        console.log(data);
         let pageid = config.wgArticleId;
         // TODO: more validation
         new mw.Api().get({

@@ -89,19 +89,17 @@ async fn inference(rfd: Rfd, wiki_bot: &Bot) -> anyhow::Result<()> {
 mod tests {
     use graphbot_config::Config;
     use mwbot::Bot;
-    use tokio::join;
 
     use super::*;
-    use crate::{COMMONS_API_URL, COMMONS_REST_URL, USER_AGENT};
+    use crate::USER_AGENT;
 
     #[tokio::test]
     async fn test_inference() {
         let config = Arc::new(RwLock::new(Config::default()));
         let url = url::Url::parse(&config.read().await.wiki).unwrap();
-        let api_url = url.join("w/api.php").unwrap();
-        let rest_url = url.join("api/rest_v1").unwrap();
+        let api_url = url.join("w/").unwrap();
         let token = config.read().await.access_token.clone();
-        let wiki_bot = Bot::builder(api_url.to_string(), rest_url.to_string())
+        let wiki_bot = Bot::builder(api_url.to_string())
             .set_user_agent(USER_AGENT.to_string())
             .build()
             .await

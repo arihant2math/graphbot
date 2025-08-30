@@ -28,6 +28,8 @@ graphbot-config = { path = "graphbot-config" }
 graphbot-db = { path = "graphbot-db" }
 mwbot = "0.7"
 num_cpus = "1.17.0"
+# DO NOT REMOVE: not used directly, but required to ensure that the vendored OpenSSL is used
+openssl = { version = "*", features = ["vendored"] }
 paste = "1.0.15"
 sea-orm = { workspace = true }
 serde = { workspace = true }

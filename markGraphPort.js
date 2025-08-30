@@ -12,10 +12,13 @@ mw.loader.using(['mediawiki.util', 'mediawiki.api'], function () {
         'wgPageName',
         'wgRelevantUserName'
     ]);
+    const commons_api = new mw.ForeignApi( 'https://commons.wikimedia.org/w/api.php' );
 
     var counter = 0;
     elements.forEach(element => {
         if (element.textContent === text) {
+            let space = document.createTextNode(' ');
+            element.appendChild(space);
             let portLink = document.createElement('a');
             // clone the value of "counter" to use in the onclick function
             let clone = structuredClone(counter);
@@ -24,7 +27,7 @@ mw.loader.using(['mediawiki.util', 'mediawiki.api'], function () {
                 portGraph(clone);
             };
             portLink.href = "#";
-            portLink.textContent = " [Port graph]";
+            portLink.textContent = "[Port graph]";
             portLink.classList.add('extiw');
             element.appendChild(portLink);
             console.log(element);
@@ -54,18 +57,17 @@ mw.loader.using(['mediawiki.util', 'mediawiki.api'], function () {
         if (name.includes("|") || name.includes("{") || name.includes("}") || name.includes("[") || name.includes("]" || name.includes("//"))) {
             throw new Error("Name contains invalid character(s)");
         }
-        // let urlEdName = name.replace(' ', '_');
-        // let url = `https://commons.wikimedia.org/w/api.php?action=query&titles=Data:${urlEdName}.chart|Data:${urlEdName}.tab&format=json`;
-        // let response = await fetch(url, {
-        //     method: 'GET',
-        //     headers: {
-        //         'Access-Control-Allow-Origin': '*',
-        //         'Content-Type': 'application/json'
-        //     },
-        // });
-        // let data = await response.json();
-        // console.log(data);
-        // TODO: Validate that those pages do not exist on commons
+        let urlEdName = name.replace(' ', '_');
+        let response = await commons_api.get({
+            action: 'query',
+            titles: [`Data:${urlEdName}.chart`, `Data:${urlEdName}.tab`],
+            format: 'json',
+        });
+        let pages = response.query.pages;
+        console.log(Object.keys(pages));
+        if (!(Object.keys(pages).includes("-1") && Object.keys(pages).includes("-2"))) {
+            throw Error("Pages exist on commons");
+        }
         let pageid = config.wgArticleId;
         new mw.Api().get({
             action: 'parse',

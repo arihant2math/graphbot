@@ -5,11 +5,13 @@ use std::{
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
-
+use dxr::{TryFromValue, Value};
+use dxr_client::{Client, ClientBuilder};
 use graphbot_config::Config;
 use paste::paste;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use url::Url;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodeInnerAttribute {
@@ -459,28 +461,27 @@ pub struct OutRoot {
     pub elapsed: f64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, TryFromValue)]
 pub struct XMLResponse {
     pub parsed: String,
     pub elapsed: f64,
 }
 
 pub async fn call_parser(input: &str, config: &RwLock<Config>) -> anyhow::Result<OutRoot> {
-    let mut client = xml_rpc::Client::new().unwrap();
     let config = config.read().await;
+    let url = Url::parse(&format!(
+        "http://{}:{}/{}",
+        config.rpc.host, config.rpc.port, config.rpc.path
+    ))?;
+    let client: Client = ClientBuilder::new(url)
+        .user_agent("dxr-client-example")
+        .build();
     let result = client.call(
-        &xml_rpc::Url::parse(&format!(
-            "http://{}:{}/{}",
-            config.rpc.host, config.rpc.port, config.rpc.path
-        ))?,
         "parse",
         [input],
-    );
+    ).await;
     let response: XMLResponse = result
-        .map_err(|e| anyhow::anyhow!("XML-RPC call failed: {}", e))
-        .and_then(|response| {
-            response.map_err(|e| anyhow::anyhow!("XML-RPC response error: {e:?}"))
-        })?;
+        .map_err(|e| anyhow::anyhow!("XML-RPC call failed: {}", e))?;
     let parsed: Wikitext = serde_json::from_str(&response.parsed)?;
     Ok(OutRoot {
         parsed,

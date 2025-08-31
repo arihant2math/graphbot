@@ -3,8 +3,7 @@ use std::{sync::Arc, time::Duration};
 use graphbot_config::Config;
 use graphbot_db::graph_failed_conversions;
 use mwbot::{Bot, SaveOptions};
-use sea_orm::{ConnectOptions, Database, EntityTrait};
-use sea_orm::sea_query::SqlWriter;
+use sea_orm::{ConnectOptions, Database, EntityTrait, sea_query::SqlWriter};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
@@ -29,7 +28,8 @@ fn generate_wikitext(errors: Vec<graph_failed_conversions::Model>) -> String {
             error.rev_id,
             error.error.as_deref().unwrap_or("No error message"),
             error.date.to_rfc3339(),
-        ).unwrap();
+        )
+        .unwrap();
     }
     text.push_str("|}\n");
     text

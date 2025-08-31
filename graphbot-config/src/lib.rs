@@ -73,7 +73,7 @@ struct Main {
     #[serde(default)]
     pub graph_task: GraphTask,
     #[serde(default)]
-    pub rfd_task: RfdTask
+    pub rfd_task: RfdTask,
 }
 
 impl Default for Main {

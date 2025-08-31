@@ -53,7 +53,9 @@ async fn create_pages(
     // Save the tab and chart files
     let tab_text = serde_json::to_string_pretty(&out.tab)?;
     let tab_file_page = bot.page(&tab_file_name)?;
-    if !tab_file_page.exists().await? {
+    if tab_file_page.exists().await? {
+        warn!("Tab file {tab_file_name} already exists, skipping creation.");
+    } else {
         match tab_file_page
             .save(
                 tab_text,
@@ -77,12 +79,12 @@ async fn create_pages(
                 return Err(e.into());
             }
         }
-    } else {
-        warn!("Tab file {tab_file_name} already exists, skipping creation.");
     }
     let chart_text = serde_json::to_string_pretty(&out.chart)?;
     let chart_file_page = bot.page(&chart_file_name)?;
-    if !chart_file_page.exists().await? {
+    if chart_file_page.exists().await? {
+        warn!("Chart file {chart_file_name} already exists, skipping creation.");
+    } else {
         match chart_file_page
             .save(
                 chart_text,
@@ -106,8 +108,6 @@ async fn create_pages(
                 return Err(e.into());
             }
         }
-    } else {
-        warn!("Chart file {chart_file_name} already exists, skipping creation.");
     }
     info!("Successfully created tab and chart files for {name}.");
     let inside = if let Some(width) = template.params_get("width").flatten() {
@@ -231,14 +231,14 @@ async fn handle_template(
                 format!(
                     "{}w/index.php?title={}&oldid={}",
                     config.read().await.wiki,
-                    title.replace(" ", "_"),
+                    title.replace(' ', "_"),
                     rev_info.id
                 )
             } else {
                 format!(
                     "{}w/index.php?title={}",
                     config.read().await.wiki,
-                    title.replace(" ", "_")
+                    title.replace(' ', "_")
                 )
             };
             let swap = create_pages(bot, &parsed, &name, &rev_url)
@@ -273,7 +273,7 @@ pub async fn run_on_page(
             // File didn't exist, ignore
         }
     };
-    let (content, _) = tokio::join!(content_future, rm_future);
+    let (content, ()) = tokio::join!(content_future, rm_future);
     let content = content.context("Failed to get wikitext")?;
     let p = call_parser(&content, config).await?;
 
@@ -310,7 +310,10 @@ pub async fn run_on_page(
     }
     // Save the modified wikitext back to the page
     let title = page.title().to_string();
-    if modified_wikitext != content {
+    if modified_wikitext == content {
+        info!("No changes made to page {title}");
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    } else {
         let save_options = SaveOptions::summary("Port graphs to charts").mark_as_bot(true);
         match page.save(modified_wikitext, &save_options).await {
             Ok(_) => info!("Successfully updated page {title}"),
@@ -319,9 +322,6 @@ pub async fn run_on_page(
                 bail!("Failed to update page {title}: {e}");
             }
         }
-    } else {
-        info!("No changes made to page {title}");
-        tokio::time::sleep(Duration::from_secs(1)).await;
     }
     if !errors.is_empty() {
         return Err(anyhow::anyhow!(
@@ -430,12 +430,11 @@ pub async fn graph_task(
                         rev_info.page_title, rev_info.id
                     );
                     continue;
-                } else {
-                    trace!(
-                        "Processing page {} with revision ID {}",
-                        rev_info.page_title, rev_info.id
-                    );
                 }
+                trace!(
+                    "Processing page {} with revision ID {}",
+                    rev_info.page_title, rev_info.id
+                );
             }
             if config.read().await.shutdown_graph_task {
                 info!("Shutdown flag is set, exiting.");
@@ -446,9 +445,8 @@ pub async fn graph_task(
             if let Err(e) = page_sender.send((o, rev_info.clone(), send)).await {
                 error!("Failed to send page to handler: {e}");
                 continue;
-            } else {
-                trace!("Page {page_title} sent to handlers");
             }
+            trace!("Page {page_title} sent to handlers");
             task::spawn({
                 let failed_revs = Arc::clone(&failed_revs);
                 async move {

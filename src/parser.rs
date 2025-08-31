@@ -5,6 +5,7 @@ use std::{
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
+
 use dxr::{TryFromValue, Value};
 use dxr_client::{Client, ClientBuilder};
 use graphbot_config::Config;
@@ -261,7 +262,7 @@ impl NodeInnerTemplate {
             .map(|param| {
                 (
                     param.name().to_string(),
-                    param.value().map(|s| s.to_string()),
+                    param.value().map(std::string::ToString::to_string),
                 )
             })
             .collect()
@@ -278,11 +279,14 @@ impl NodeInnerTemplate {
         });
     }
 
+    /// Get the value of a parameter by name.
+    /// Returns `None` if the parameter does not exist.
+    /// Returns `Some(None)` if the parameter exists but has no value.
     pub fn params_get(&self, name: &str) -> Option<Option<String>> {
         self.params
             .iter()
             .find(|param| param.name() == name)
-            .map(|param| param.value().map(|s| s.to_string()))
+            .map(|param| param.value().map(std::string::ToString::to_string))
     }
 
     pub fn params_remove(&mut self, name: &str) {
@@ -476,12 +480,9 @@ pub async fn call_parser(input: &str, config: &RwLock<Config>) -> anyhow::Result
     let client: Client = ClientBuilder::new(url)
         .user_agent("dxr-client-example")
         .build();
-    let result = client.call(
-        "parse",
-        [input],
-    ).await;
-    let response: XMLResponse = result
-        .map_err(|e| anyhow::anyhow!("XML-RPC call failed: {}", e))?;
+    let result = client.call("parse", [input]).await;
+    let response: XMLResponse =
+        result.map_err(|e| anyhow::anyhow!("XML-RPC call failed: {}", e))?;
     let parsed: Wikitext = serde_json::from_str(&response.parsed)?;
     Ok(OutRoot {
         parsed,

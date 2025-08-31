@@ -129,11 +129,6 @@ pub async fn rfd_task(wiki_bot: Arc<Bot>, config: Arc<RwLock<Config>>) -> anyhow
             }
         }
         for rfd_page in rfd_pages {
-            info!("Processing RFD page: {}", rfd_page);
-            let rfd_page_obj = wiki_bot.page(&rfd_page)?;
-            let rfd_text = rfd_page_obj.wikitext().await?;
-            let parsed_rfd = parser::call_parser(&rfd_text, &config).await?;
-
             struct State {
                 rfds_started: bool,
                 rfds: Vec<Rfd>,
@@ -180,6 +175,11 @@ pub async fn rfd_task(wiki_bot: Arc<Bot>, config: Arc<RwLock<Config>>) -> anyhow
             }
 
             let mut state = State::new();
+
+            info!("Processing RFD page: {}", rfd_page);
+            let rfd_page_obj = wiki_bot.page(&rfd_page)?;
+            let rfd_text = rfd_page_obj.wikitext().await?;
+            let parsed_rfd = parser::call_parser(&rfd_text, &config).await?;
 
             for node in &parsed_rfd.parsed.nodes {
                 if let Some(comment) = node.clone().into_comment() {

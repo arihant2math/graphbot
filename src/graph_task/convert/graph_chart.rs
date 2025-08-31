@@ -22,9 +22,8 @@ fn convert_graph_chart_type(s: &str) -> ChartType {
     match &*s.to_ascii_lowercase() {
         "line" => ChartType::Line,
         "bar" | "rect" => ChartType::Bar,
-        "area" => ChartType::Area,
+        "area" | "stackedrect" => ChartType::Area,
         "pie" => ChartType::Pie,
-        "stackedrect" => ChartType::Area,
         _ => {
             warn!("Unknown chart type '{s}', defaulting to 'line'.");
             ChartType::Line
@@ -82,6 +81,7 @@ mod number_parse_tests {
     use super::parse_number;
 
     #[test]
+    #[allow(clippy::approx_constant)]
     fn test_parse_number() {
         assert_eq!(parse_number("42"), Number::from_i128(42i128));
         assert_eq!(parse_number("-42"), Number::from_i128(-42i128));
@@ -232,7 +232,7 @@ fn detect_type(s: &str) -> Option<ValueType> {
     if s.is_empty() {
         return None;
     }
-    let strings: Vec<_> = s.split(",").map(str::trim).collect();
+    let strings: Vec<_> = s.split(',').map(str::trim).collect();
     let mut number = true;
     for item in &strings {
         if parse_number(item).is_none() {

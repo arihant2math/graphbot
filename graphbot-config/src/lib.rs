@@ -50,11 +50,16 @@ pub struct GraphTask {
 impl Default for GraphTask {
     fn default() -> Self {
         GraphTask {
-            db_url: "".to_string(),
+            db_url: String::new(),
             search_category: "Category:Graphs_to_Port".to_string(),
             num_workers: None,
         }
     }
+}
+
+#[derive(Deserialize, Serialize, Debug, Default)]
+pub struct RfdTask {
+    pub wiki_replica_db_url: String,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -67,6 +72,8 @@ struct Main {
     pub server: Server,
     #[serde(default)]
     pub graph_task: GraphTask,
+    #[serde(default)]
+    pub rfd_task: RfdTask
 }
 
 impl Default for Main {
@@ -77,11 +84,13 @@ impl Default for Main {
             rpc: Rpc::default(),
             server: Server::default(),
             graph_task: GraphTask::default(),
+            rfd_task: RfdTask::default(),
         }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Config {
     pub access_token: String,
     pub client_secret: String,
@@ -91,6 +100,7 @@ pub struct Config {
     pub rpc: Rpc,
     pub server: Server,
     pub graph_task: GraphTask,
+    pub rfd_task: RfdTask,
     pub shutdown_graph_task: bool,
     pub pause_graph_task: bool,
     pub shutdown_rfd_task: bool,
@@ -108,6 +118,7 @@ impl Config {
             rpc: main.rpc,
             server: main.server,
             graph_task: main.graph_task,
+            rfd_task: main.rfd_task,
             shutdown_graph_task: false,
             pause_graph_task: false,
             shutdown_rfd_task: true,
@@ -117,6 +128,7 @@ impl Config {
 
     #[expect(unused)]
     fn into_parts(self) -> (Secret, Main) {
+        // Helps ensure that all fields are accounted for
         (
             Secret {
                 access_token: self.access_token,
@@ -129,10 +141,18 @@ impl Config {
                 rpc: self.rpc,
                 server: self.server,
                 graph_task: self.graph_task,
+                rfd_task: self.rfd_task,
             },
         )
     }
 
+    /// Load configuration from conf/secret.toml and conf/main.toml
+    /// Searches for conf/ directory in current directory or parent directories
+    /// # Errors
+    /// - If conf/ directory is not found
+    /// - If secret.toml or main.toml cannot be read or parsed
+    /// # Panics
+    /// - If the current directory cannot be determined
     pub fn load() -> anyhow::Result<Self> {
         // Find conf directory in current directory or parent directories
         let mut dir = std::env::current_dir().context("Failed to get current directory")?;

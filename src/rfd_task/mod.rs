@@ -67,20 +67,10 @@ struct Rfd {
 /// - Redirect to the same target as the nominated redirect and differ only in
 ///   the presence or absence of non-alphanumeric characters, and/or differ only
 ///   in case
-async fn inference(rfd: Rfd, wiki_bot: &Bot) -> anyhow::Result<()> {
+async fn inference(rfd: Rfd) -> anyhow::Result<()> {
     info!("Inference called for RFD: {:?}", rfd);
-    for redirect in rfd.associated_redirects {
-        // Iterate through the associated redirects for redirect.target
-        // let mut similar_redirects = Vec::new();
-        fn normalize_str(s: &str) -> String {
-            diacritics::remove_diacritics(s)
-                .to_lowercase()
-                .replace(" ", "")
-                .replace("_", "")
-                .replace("-", "")
-                .replace("'", "")
-                .replace(".", "")
-        }
+    for _redirect in rfd.associated_redirects {
+        todo!();
     }
     Ok(())
 }
@@ -112,7 +102,7 @@ mod tests {
                 target: "Hangul".to_string(),
             }],
         };
-        let inference = inference(rfd, &wiki_bot).await.unwrap();
+        let inference = inference(rfd).await.unwrap();
     }
 }
 

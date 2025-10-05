@@ -1,0 +1,18 @@
+name: spellcheck.yml
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+jobs:
+    spellcheck:
+        name: Spell Check
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v5
+        - uses: actions-rust-lang/setup-rust-toolchain@v1
+        - name: Install cargo-csc
+          run: cargo install cargo-csc
+        - name: Run cargo-csc
+          run: cargo-csc check .
+

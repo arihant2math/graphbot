@@ -10,6 +10,7 @@ struct Secret {
     pub access_token: String,
     pub client_secret: String,
     pub client_id: String,
+    pub tools_db_password: String,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -95,6 +96,7 @@ pub struct Config {
     pub access_token: String,
     pub client_secret: String,
     pub client_id: String,
+    pub tools_db_password: String,
     pub username: String,
     pub wiki: String,
     pub rpc: Rpc,
@@ -109,41 +111,27 @@ pub struct Config {
 
 impl Config {
     fn from_parts(secret: Secret, main: Main) -> Self {
+        let db_password = &secret.tools_db_password;
+        let mut graph_task = main.graph_task;
+        let mut rfd_task = main.rfd_task;
+        graph_task.db_url = graph_task.db_url.replace("{{password}}", db_password);
+        rfd_task.wiki_replica_db_url = rfd_task.wiki_replica_db_url.replace("{{password}}", db_password);
         Config {
             access_token: secret.access_token,
             client_secret: secret.client_secret,
             client_id: secret.client_id,
+            tools_db_password: secret.tools_db_password,
             username: main.username,
             wiki: main.wiki,
             rpc: main.rpc,
             server: main.server,
-            graph_task: main.graph_task,
-            rfd_task: main.rfd_task,
+            graph_task,
+            rfd_task,
             shutdown_graph_task: false,
             pause_graph_task: false,
             shutdown_rfd_task: true,
             pause_rfd_task: true,
         }
-    }
-
-    #[expect(unused)]
-    fn into_parts(self) -> (Secret, Main) {
-        // Helps ensure that all fields are accounted for
-        (
-            Secret {
-                access_token: self.access_token,
-                client_secret: self.client_secret,
-                client_id: self.client_id,
-            },
-            Main {
-                username: self.username,
-                wiki: self.wiki,
-                rpc: self.rpc,
-                server: self.server,
-                graph_task: self.graph_task,
-                rfd_task: self.rfd_task,
-            },
-        )
     }
 
     /// Load configuration from conf/secret.toml and conf/main.toml

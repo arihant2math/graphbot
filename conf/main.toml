@@ -3,7 +3,7 @@ wiki = "https://en.wikipedia.org/"
 
 [graph_task]
 db_url = "mysql://s56792:twcaSbTtYUDv2sld@tools.db.svc.wikimedia.cloud/s56792__graph"
-search_category = "Category:Graphs_to_Port"
+search_category = "ategory:Pages_with_graphs_to_be_ported_by_GraphBot"
 
 [rfd_task]
 wiki_replica_db_url = "mysql://s56792:twcaSbTtYUDv2sld@enwiki.web.db.svc.wikimedia.cloud/enwiki_p"

@@ -29,8 +29,10 @@ async fn main() {
     let config = Config::load().unwrap();
     let url = config.graph_task.db_url;
     let mut options = ConnectOptions::new(&url);
-    options.max_connections(3);
+    options.max_connections(1);
+    println!("Connecting to database ...");
     let db = Database::connect(options).await.unwrap();
+    println!("Connected to database successfully.");
     let tera = match Tera::new("templates/**/*.html") {
         Ok(t) => t,
         Err(e) => {
@@ -39,7 +41,6 @@ async fn main() {
         }
     };
     let state = Arc::new(AppState { db, tera });
-    println!("Connected to database successfully.");
 
     let app = Router::new()
         .route("/", get(root))

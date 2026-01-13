@@ -115,7 +115,9 @@ impl Config {
         let mut graph_task = main.graph_task;
         let mut rfd_task = main.rfd_task;
         graph_task.db_url = graph_task.db_url.replace("{{password}}", db_password);
-        rfd_task.wiki_replica_db_url = rfd_task.wiki_replica_db_url.replace("{{password}}", db_password);
+        rfd_task.wiki_replica_db_url = rfd_task
+            .wiki_replica_db_url
+            .replace("{{password}}", db_password);
         Config {
             access_token: secret.access_token,
             client_secret: secret.client_secret,

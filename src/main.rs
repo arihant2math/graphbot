@@ -145,10 +145,6 @@ async fn main() -> anyhow::Result<()> {
             Ok(())
         }
     });
-    let _ = join!(
-        graph_task,
-        rfd_task,
-        shutdown_task
-    );
+    let _ = join!(graph_task, rfd_task, shutdown_task);
     Ok(())
 }

@@ -1,20 +1,24 @@
-use std::sync::Arc;
-use axum::{
-    routing::get,
-    Router,
-};
 use axum::extract::State;
 use axum::response::Html;
-use sea_orm::{ConnectOptions, Database, DbConn, EntityTrait};
-use tera::Tera;
+use axum::{Json, Router, routing::get};
 use graphbot_config::Config;
+use graphbot_db::graph_failed_conversions;
 use graphbot_db::prelude::GraphFailedConversions;
+use sea_orm::{ConnectOptions, Database, DbConn, EntityTrait};
+use std::sync::Arc;
+use tera::Tera;
 
 async fn root(State(state): State<Arc<AppState>>) -> Html<String> {
     let mut context = tera::Context::new();
     let failed = GraphFailedConversions::find().all(&state.db).await.unwrap();
     context.insert("failed_revs", &failed);
     Html(state.tera.render("index.html", &context).unwrap())
+}
+
+async fn json_failed_revs(
+    State(state): State<Arc<AppState>>,
+) -> Json<Vec<graph_failed_conversions::Model>> {
+    Json(GraphFailedConversions::find().all(&state.db).await.unwrap())
 }
 
 struct AppState {
@@ -41,6 +45,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(root))
+        .route("/failed_revs.json", get(json_failed_revs))
         .with_state(state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await.unwrap();

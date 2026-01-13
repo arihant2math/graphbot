@@ -1,11 +1,9 @@
-use axum::extract::State;
-use axum::response::Html;
-use axum::{Json, Router, routing::get};
-use graphbot_config::Config;
-use graphbot_db::graph_failed_conversions;
-use graphbot_db::prelude::GraphFailedConversions;
-use sea_orm::{ConnectOptions, Database, DbConn, EntityTrait};
 use std::sync::Arc;
+
+use axum::{Json, Router, extract::State, response::Html, routing::get};
+use graphbot_config::Config;
+use graphbot_db::{graph_failed_conversions, prelude::GraphFailedConversions};
+use sea_orm::{ConnectOptions, Database, DbConn, EntityTrait};
 use tera::Tera;
 
 async fn root(State(state): State<Arc<AppState>>) -> Html<String> {

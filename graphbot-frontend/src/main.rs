@@ -1,16 +1,26 @@
 use std::sync::Arc;
 
 use axum::{Json, Router, extract::State, response::Html, routing::get};
+use axum::http::StatusCode;
 use graphbot_config::Config;
 use graphbot_db::{graph_failed_conversions, prelude::GraphFailedConversions};
 use sea_orm::{ConnectOptions, Database, DbConn, EntityTrait};
 use tera::Tera;
 
-async fn root(State(state): State<Arc<AppState>>) -> Html<String> {
+async fn root(State(state): State<Arc<AppState>>) -> Result<Html<String>, StatusCode> {
     let mut context = tera::Context::new();
-    let failed = GraphFailedConversions::find().all(&state.db).await.unwrap();
+    let failed = GraphFailedConversions::find()
+        .all(&state.db)
+        .await
+        .map_err(|e| {
+            eprintln!("Database error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     context.insert("failed_revs", &failed);
-    Html(state.tera.render("index.html", &context).unwrap())
+    Ok(Html(state.tera.render("index.html", &context).map_err(|e| {
+        eprintln!("Template error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?))
 }
 
 async fn json_failed_revs(

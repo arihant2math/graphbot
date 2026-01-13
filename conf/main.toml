@@ -11,4 +11,4 @@ wiki_replica_db_url = "mysql://s56792:{{password}}@enwiki.web.db.svc.wikimedia.c
 [rpc]
 host = "localhost"
 port = 8000
-path = "/RPC2"
+path = "RPC2"

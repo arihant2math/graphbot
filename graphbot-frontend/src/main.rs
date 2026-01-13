@@ -43,6 +43,6 @@ async fn main() {
         .route("/", get(root))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:5005").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }

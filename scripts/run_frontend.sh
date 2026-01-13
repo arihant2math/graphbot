@@ -1,0 +1,1 @@
+$HOME/graphbot/target/release/graphbot-frontend

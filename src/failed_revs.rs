@@ -13,7 +13,7 @@ impl FailedRevs {
     pub async fn load(config: &RwLock<Config>) -> anyhow::Result<Self> {
         let url = config.read().await.graph_task.db_url.clone();
         let mut options = ConnectOptions::new(&url);
-        options.max_connections(4);
+        options.max_connections(3);
         let db = Database::connect(options).await?;
         Ok(Self(db))
     }

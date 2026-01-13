@@ -1,0 +1,12 @@
+[package]
+name = "graphbot-frontend"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.8"
+graphbot-config = { path = "../graphbot-config" }
+graphbot-db = { path = "../graphbot-db" }
+sea-orm = { workspace = true, features = ["sqlx-sqlite", "runtime-tokio-rustls"] }
+tera = "1.20.1"
+tokio = { workspace = true }

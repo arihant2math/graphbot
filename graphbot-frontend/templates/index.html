@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Home{% endblock title %}
+{% block content %}
+<div class="m-8 space-y-6">
+    <h1 class="text-3xl font-bold">Graphbot</h1>
+    <p>Currently there are {{ failed_revs | length }} failed conversions.</p>
+    <div class="rounded-lg border border-default">
+        <table class="w-full text-sm text-left rtl:text-right text-body">
+            <thead class="text-sm text-body bg-gray-100 border-b rounded-lg border-default">
+            <tr>
+                <th class="px-6 py-3 font-medium">Page Title</th>
+                <th class="px-6 py-3 font-medium">Revision ID</th>
+                <th class="px-6 py-3 font-medium">Time</th>
+                <th class="px-6 py-3 font-medium">Error Message</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for rev in failed_revs %}
+            <tr>
+                <td class="px-6 py-4 font-bold"><a class="text-blue-600 underline" href="https://en.wikipedia.org/wiki/{{ rev.page_title | replace(from=" ", to="_") }}">{{ rev.page_title }}</a></td>
+                <td class="px-6 py-4"><a class="text-blue-600 underline" href="https://en.wikipedia.org/w/index.php?title={{ rev.page_title | replace(from=" ", to="_") }}&oldid={{ rev.rev_id }}">{{ rev.rev_id }}</a></td>
+                <td class="px-6 py-4">{{ rev.date }}</td>
+                <td class="px-6 py-4">{{ rev.error }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock content %}

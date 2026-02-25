@@ -413,7 +413,7 @@ pub async fn graph_task(
         let generator = CategoryMembers::new(&config.read().await.graph_task.search_category)
             .sort(CategoryMemberSort::Timestamp);
         let mut output = generator.generate(&wiki_bot);
-        while let Some(o) = output.recv().await {
+        while let Some(o) = output.next().await {
             if let Err(e) = o {
                 error!("Error receiving page: {e}");
                 continue;

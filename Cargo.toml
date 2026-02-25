@@ -26,7 +26,7 @@ dxr_client = { version = "0.8.0", features = ["reqwest"] }
 futures = "0.3"
 graphbot-config = { path = "graphbot-config" }
 graphbot-db = { path = "graphbot-db" }
-mwbot = "0.7"
+mwbot = "0.8.0-rc.1"
 num_cpus = "1.17.0"
 # DO NOT REMOVE: not used directly, but required to ensure that the vendored OpenSSL is used
 openssl = { version = "*", features = ["vendored"] }

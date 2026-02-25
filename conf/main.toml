@@ -2,7 +2,7 @@ username = "GraphBot"
 wiki = "https://en.wikipedia.org/"
 
 [graph_task]
-db_url = "mysql://s56792:{{password}}@127.0.0.1:3307/s56792__graph"
+db_url = "mysql://s56792:{{password}}@tools.db.svc.wikimedia.cloud/s56792__graph"
 search_category = "Category:Pages_with_graphs_to_be_ported_by_GraphBot"
 
 [rfd_task]

@@ -21,8 +21,8 @@ edition = "2024"
 anyhow = { workspace = true }
 axum = "0.8"
 diacritics = "0.2.2"
-dxr = { version = "0.7", features = ["derive"] }
-dxr_client = { version = "0.7", features = ["reqwest"] }
+dxr = { version = "0.8.0", features = ["derive"] }
+dxr_client = { version = "0.8.0", features = ["reqwest"] }
 futures = "0.3"
 graphbot-config = { path = "graphbot-config" }
 graphbot-db = { path = "graphbot-db" }

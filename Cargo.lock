@@ -877,37 +877,37 @@ dependencies = [
 
 [[package]]
 name = "dxr"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2759631240ddab7237eddf931f632e5253108eb5a919b4fb0440652d6a381f62"
+checksum = "d823ec61c98061befb8d168364c547a82c6d936fdd4fc96e2ab8396b79eea020"
 dependencies = [
  "base64",
- "chrono",
  "dxr_derive",
  "quick-xml",
  "serde",
- "thiserror 1.0.69",
+ "thiserror",
+ "winnow",
 ]
 
 [[package]]
 name = "dxr_client"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f57dc5196549b452cfb488f5c66356b62fc3eaf3a4d0784bd02af32f991d7f55"
+checksum = "96a732af9ba31b86c963a4b96725a77710101d6316dff6087f53579a9df78d44"
 dependencies = [
  "dxr",
  "http",
  "log",
  "reqwest",
- "thiserror 1.0.69",
+ "thiserror",
  "url",
 ]
 
 [[package]]
 name = "dxr_derive"
-version = "0.7.1"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81b599b775d558b4649f6e019f95c3377dbee189a132e56df1490991804ec590"
+checksum = "f4843954c6393901a14db72f622a108caf48a087df4d3a075f6bdbae8f172bf0"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -1041,7 +1041,7 @@ dependencies = [
  "dirs",
  "libc",
  "pwd-grp",
- "thiserror 2.0.17",
+ "thiserror",
  "walkdir",
 ]
 
@@ -1937,7 +1937,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "thiserror 2.0.17",
+ "thiserror",
  "tokio",
  "tracing",
  "wasm-bindgen-futures",
@@ -1987,7 +1987,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "thiserror 2.0.17",
+ "thiserror",
  "tokio",
  "toml",
  "tracing",
@@ -2024,7 +2024,7 @@ dependencies = [
  "bytemuck",
  "regex",
  "serde",
- "thiserror 2.0.17",
+ "thiserror",
  "tinyvec",
 ]
 
@@ -2299,7 +2299,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "thiserror 2.0.17",
+ "thiserror",
  "tokio",
  "tracing",
  "url",
@@ -2639,7 +2639,7 @@ dependencies = [
  "derive-deftly",
  "libc",
  "paste",
- "thiserror 2.0.17",
+ "thiserror",
 ]
 
 [[package]]
@@ -2666,7 +2666,7 @@ dependencies = [
  "rustc-hash",
  "rustls",
  "socket2",
- "thiserror 2.0.17",
+ "thiserror",
  "tokio",
  "tracing",
  "web-time",
@@ -2687,7 +2687,7 @@ dependencies = [
  "rustls",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.17",
+ "thiserror",
  "tinyvec",
  "tracing",
  "web-time",
@@ -2813,7 +2813,7 @@ checksum = "a4e608c6638b9c18977b00b475ac1f28d14e84b27d8d42f70e0bf1e3dec127ac"
 dependencies = [
  "getrandom 0.2.17",
  "libredox",
- "thiserror 2.0.17",
+ "thiserror",
 ]
 
 [[package]]
@@ -3115,7 +3115,7 @@ dependencies = [
  "serde_json",
  "sqlx",
  "strum 0.26.3",
- "thiserror 2.0.17",
+ "thiserror",
  "time",
  "tracing",
  "url",
@@ -3489,7 +3489,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "smallvec",
- "thiserror 2.0.17",
+ "thiserror",
  "time",
  "tokio",
  "tokio-stream",
@@ -3577,7 +3577,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.17",
+ "thiserror",
  "time",
  "tracing",
  "uuid",
@@ -3620,7 +3620,7 @@ dependencies = [
  "smallvec",
  "sqlx-core",
  "stringprep",
- "thiserror 2.0.17",
+ "thiserror",
  "time",
  "tracing",
  "uuid",
@@ -3647,7 +3647,7 @@ dependencies = [
  "serde",
  "serde_urlencoded",
  "sqlx-core",
- "thiserror 2.0.17",
+ "thiserror",
  "time",
  "tracing",
  "url",
@@ -3842,31 +3842,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
-dependencies = [
- "thiserror-impl 1.0.69",
-]
-
-[[package]]
-name = "thiserror"
 version = "2.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
 dependencies = [
- "thiserror-impl 2.0.17",
-]
-
-[[package]]
-name = "thiserror-impl"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.114",
+ "thiserror-impl",
 ]
 
 [[package]]
@@ -4141,7 +4121,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "786d480bce6247ab75f005b14ae1624ad978d3029d9113f0a22fa1ac773faeaf"
 dependencies = [
  "crossbeam-channel",
- "thiserror 2.0.17",
+ "thiserror",
  "time",
  "tracing-subscriber",
 ]

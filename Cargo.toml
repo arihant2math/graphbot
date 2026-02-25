@@ -10,7 +10,7 @@ anyhow = "1.0"
 sea-orm = { version = "1.1", features = ["sqlx-mysql", "sqlx-sqlite", "runtime-tokio-rustls", "macros" ] }
 serde = { version = "1.0", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
-toml = "0.9"
+toml = "1.0"
 
 [package]
 name = "graphbot"

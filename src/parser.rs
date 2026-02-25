@@ -478,7 +478,7 @@ pub async fn call_parser(input: &str, config: &RwLock<Config>) -> anyhow::Result
         config.rpc.host, config.rpc.port, config.rpc.path
     ))?;
     let client: Client = ClientBuilder::new(url)
-        .user_agent("dxr-client-example")
+        .user_agent("graphbot-rpc-client")
         .build();
     let result = client.call("parse", [input]).await;
     let response: XMLResponse =

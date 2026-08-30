@@ -100,8 +100,8 @@ async fn main() -> anyhow::Result<()> {
     let _server_task = task::spawn({
         let config = Arc::clone(&config);
         async move {
-            if let Err(e) = server::run(config).await {
-                error!("Server failed to run: {e}");
+            if let Err(error) = server::run(config).await {
+                error!(error = %format!("{error:#}"), "Server failed");
             }
         }
     });
@@ -111,8 +111,8 @@ async fn main() -> anyhow::Result<()> {
         let commons_bot = Arc::clone(&commons_bot);
         let config = Arc::clone(&config);
         async move {
-            if let Err(e) = graph_task::graph_task(commons_bot, wiki_bot, config).await {
-                error!("Graph task failed: {e}");
+            if let Err(error) = graph_task::graph_task(commons_bot, wiki_bot, config).await {
+                error!(error = %format!("{error:#}"), "Graph task failed");
             }
         }
     });
@@ -120,8 +120,8 @@ async fn main() -> anyhow::Result<()> {
         let wiki_bot = Arc::clone(&wiki_bot);
         let config = Arc::clone(&config);
         async move {
-            if let Err(e) = rfd_task::rfd_task(wiki_bot, config).await {
-                error!("RFD task failed: {e}");
+            if let Err(error) = rfd_task::rfd_task(wiki_bot, config).await {
+                error!(error = %format!("{error:#}"), "RFD task failed");
             }
         }
     });

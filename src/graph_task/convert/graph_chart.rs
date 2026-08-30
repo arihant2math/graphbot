@@ -81,6 +81,7 @@ mod tests {
     use serde_json::Number;
 
     use super::{generate, parse_number};
+    use crate::graph_task::convert::ConversionOutput;
 
     #[test]
     #[allow(clippy::approx_constant)]
@@ -107,6 +108,57 @@ mod tests {
             result.err().map(|error| error.to_string()).as_deref(),
             Some("Neither 'y' nor 'y1' present")
         );
+    }
+
+    #[test]
+    fn graph_with_external_table_uses_existing_data() {
+        let tag = HashMap::from([
+            (
+                "table".to_string(),
+                Some("Data:ncei.noaa.gov/weather/Honolulu.tab".to_string()),
+            ),
+            ("x".to_string(), Some("date".to_string())),
+            (
+                "title".to_string(),
+                Some("Honolulu monthly weather statistics".to_string()),
+            ),
+        ]);
+
+        let output = generate("HonoluluWeather", &tag, "https://example.com").unwrap();
+
+        match output {
+            ConversionOutput::ExistingData {
+                chart,
+                tab_file_name,
+                x_field,
+            } => {
+                assert_eq!(tab_file_name, "ncei.noaa.gov/weather/Honolulu.tab");
+                assert_eq!(chart.source, tab_file_name);
+                assert_eq!(x_field.as_deref(), Some("date"));
+            }
+            ConversionOutput::GeneratedData { .. } => panic!("expected existing table data"),
+        }
+    }
+
+    #[test]
+    fn external_table_name_allows_colons_and_rejects_fragments() {
+        let with_colon = HashMap::from([(
+            "table".to_string(),
+            Some("Data:weather:Honolulu".to_string()),
+        )]);
+        let output = generate("HonoluluWeather", &with_colon, "https://example.com").unwrap();
+        assert!(matches!(
+            output,
+            ConversionOutput::ExistingData { tab_file_name, .. }
+                if tab_file_name == "weather:Honolulu.tab"
+        ));
+
+        let with_fragment = HashMap::from([(
+            "table".to_string(),
+            Some("weather/Honolulu.tab#data".to_string()),
+        )]);
+        let error = generate("HonoluluWeather", &with_fragment, "https://example.com").unwrap_err();
+        assert!(error.to_string().contains("section fragment"));
     }
 }
 
@@ -143,6 +195,7 @@ pub fn generate(
 ) -> anyhow::Result<ConversionOutput> {
     let supported_attrs = [
         "type",
+        "table",
         "xType",
         "yType",
         "xAxisTitle",
@@ -171,10 +224,17 @@ pub fn generate(
         "y8Title",
         "y9Title",
     ];
-    for attr in tag.keys() {
-        if !supported_attrs.contains(&attr.as_str()) {
-            warn!("Unsupported attribute '{}' in graph chart tag.", attr);
-        }
+    let mut unsupported_attrs: Vec<_> = tag
+        .keys()
+        .filter(|attr| !supported_attrs.contains(&attr.as_str()))
+        .cloned()
+        .collect();
+    unsupported_attrs.sort();
+    if !unsupported_attrs.is_empty() {
+        warn!(
+            unsupported_attributes = ?unsupported_attrs,
+            "Graph chart contains unsupported attributes"
+        );
     }
 
     let chart_type = tag
@@ -182,7 +242,32 @@ pub fn generate(
         .cloned()
         .flatten()
         .unwrap_or("line".to_string());
-    let tab_file_name = format!("{name}{TAB_EXT}");
+    if chart_type.starts_with("stacked") && chart_type != "stackedrect" {
+        bail!("Non-rect stacked charts are not supported yet by the chart extension");
+    }
+
+    let existing_tab = tag
+        .get("table")
+        .map(|value| {
+            value
+                .as_deref()
+                .ok_or_else(|| anyhow!("'table' attribute has no value"))
+                .and_then(normalize_tab_file_name)
+        })
+        .transpose()?;
+    if existing_tab.is_some()
+        && tag.keys().any(|key| {
+            key == "y"
+                || key
+                    .strip_prefix('y')
+                    .is_some_and(|v| v.parse::<u32>().is_ok())
+        })
+    {
+        bail!("External table data cannot be combined with inline y values");
+    }
+    let tab_file_name = existing_tab
+        .clone()
+        .unwrap_or_else(|| format!("{name}{TAB_EXT}"));
 
     macro_rules! gen_axis {
         ($tag:expr, $name:expr) => {
@@ -196,36 +281,16 @@ pub fn generate(
         };
     }
 
-    if chart_type == "pie" {
-        let chart = Chart {
-            license: LICENSE.to_string(),
-            r#type: convert_graph_chart_type(&chart_type),
-            x_axis: None,
-            y_axis: None,
-            source: tab_file_name,
-            title: Some(
-                tag.get("title")
-                    .cloned()
-                    .unwrap_or_default()
-                    .map(LocalizableString::en)
-                    .unwrap_or(LocalizableString::en(name.to_string())),
-            ),
-            ..Default::default()
-        };
-        return Ok(ConversionOutput {
-            chart,
-            tab: gen_pie_tab(tag, source_url)?,
-        });
-    } else if chart_type.starts_with("stacked") && &chart_type != "stackedrect" {
-        bail!("Non-rect stacked charts are not supported yet by the chart extension");
-    }
-
     let chart = Chart {
         license: LICENSE.to_string(),
         r#type: convert_graph_chart_type(&chart_type),
-        x_axis: gen_axis!(tag, "xAxisTitle"),
-        y_axis: gen_axis!(tag, "yAxisTitle"),
-        source: tab_file_name,
+        x_axis: (chart_type != "pie")
+            .then(|| gen_axis!(tag, "xAxisTitle"))
+            .flatten(),
+        y_axis: (chart_type != "pie")
+            .then(|| gen_axis!(tag, "yAxisTitle"))
+            .flatten(),
+        source: tab_file_name.clone(),
         title: Some(
             tag.get("title")
                 .cloned()
@@ -235,10 +300,48 @@ pub fn generate(
         ),
         ..Default::default()
     };
-    Ok(ConversionOutput {
-        chart,
-        tab: gen_tab(tag, source_url)?,
-    })
+
+    if let Some(tab_file_name) = existing_tab {
+        let x_field = tag.get("x").cloned().flatten();
+        if x_field.as_deref().is_some_and(|field| field.contains(',')) {
+            bail!("External table x must name one field, not inline values");
+        }
+        return Ok(ConversionOutput::ExistingData {
+            chart,
+            tab_file_name,
+            x_field,
+        });
+    }
+
+    let tab = if chart_type == "pie" {
+        gen_pie_tab(tag, source_url)?
+    } else {
+        gen_tab(tag, source_url)?
+    };
+    Ok(ConversionOutput::GeneratedData { chart, tab })
+}
+
+fn normalize_tab_file_name(value: &str) -> anyhow::Result<String> {
+    let mut value = value.trim();
+    if value
+        .get(.."Data:".len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("Data:"))
+    {
+        value = &value["Data:".len()..];
+    }
+    let value = value.trim();
+    if value.is_empty() {
+        bail!("'table' attribute is empty");
+    }
+    if value.contains('#') {
+        bail!("External table must not contain a section fragment: {value}");
+    }
+
+    if value.to_ascii_lowercase().ends_with(TAB_EXT) {
+        Ok(value.to_string())
+    } else {
+        Ok(format!("{value}{TAB_EXT}"))
+    }
 }
 
 fn detect_type(s: &str) -> Option<ValueType> {

@@ -6,7 +6,15 @@ mod pie_chart;
 
 pub use graph_chart::generate as gen_graph_chart;
 
-pub struct ConversionOutput {
-    pub chart: Chart,
-    pub tab: Tab,
+#[derive(Debug)]
+pub enum ConversionOutput {
+    GeneratedData {
+        chart: Chart,
+        tab: Tab,
+    },
+    ExistingData {
+        chart: Chart,
+        tab_file_name: String,
+        x_field: Option<String>,
+    },
 }

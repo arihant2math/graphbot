@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::{Context, bail};
-use convert::gen_graph_chart;
+use convert::{ConversionOutput, gen_graph_chart};
 use graphbot_config::Config;
 use mwbot::{
     Bot, Page, SaveOptions,
@@ -10,6 +10,7 @@ use mwbot::{
         categories::{CategoryMemberSort, CategoryMembers},
     },
 };
+use serde::Deserialize;
 use tokio::{
     sync::{Mutex, RwLock, mpsc, mpsc::Receiver, oneshot, oneshot::Sender},
     task,
@@ -35,7 +36,100 @@ struct Swap {
     to: String,
 }
 
-#[tracing::instrument(skip(bot, template))]
+#[derive(Debug, Deserialize)]
+struct ExternalTabDocument {
+    schema: ExternalTabSchema,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExternalTabSchema {
+    fields: Vec<ExternalTabField>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExternalTabField {
+    name: String,
+    #[serde(rename = "type")]
+    field_type: String,
+}
+
+fn validate_external_tab_schema(
+    content: &str,
+    tab_file_name: &str,
+    x_field: Option<&str>,
+) -> anyhow::Result<()> {
+    let document: ExternalTabDocument = serde_json::from_str(content).with_context(|| {
+        format!("External table Data:{tab_file_name} is not valid tabular JSON")
+    })?;
+    let fields = &document.schema.fields;
+    if fields.len() < 2 {
+        bail!(
+            "External table Data:{tab_file_name} must contain an x field and at least one y field"
+        );
+    }
+
+    if let Some(x_field) = x_field.map(str::trim).filter(|field| !field.is_empty())
+        && fields[0].name != x_field
+    {
+        bail!(
+            "External table Data:{tab_file_name} uses '{}' as its first field, but the graph requests x='{x_field}'",
+            fields[0].name
+        );
+    }
+
+    let non_numeric_fields: Vec<_> = fields[1..]
+        .iter()
+        .filter(|field| field.field_type != "number")
+        .map(|field| format!("{} ({})", field.name, field.field_type))
+        .collect();
+    if !non_numeric_fields.is_empty() {
+        bail!(
+            "External table Data:{tab_file_name} has non-numeric y fields: {}",
+            non_numeric_fields.join(", ")
+        );
+    }
+    Ok(())
+}
+
+async fn load_external_tab(
+    bot: &Bot,
+    tab_file_name: &str,
+    x_field: Option<&str>,
+) -> anyhow::Result<String> {
+    let requested_title = format!("Data:{tab_file_name}");
+    let page = bot
+        .page(&requested_title)
+        .with_context(|| format!("Invalid external table title {requested_title}"))?;
+    if !page
+        .exists()
+        .await
+        .with_context(|| format!("Failed to check whether {requested_title} exists"))?
+    {
+        bail!("External table {requested_title} does not exist");
+    }
+    let content = page
+        .wikitext()
+        .await
+        .with_context(|| format!("Failed to load external table {requested_title}"))?;
+    validate_external_tab_schema(&content, tab_file_name, x_field)?;
+
+    let canonical_file_name = page
+        .title()
+        .strip_prefix("Data:")
+        .map(str::to_string)
+        .with_context(|| {
+            format!(
+                "External table resolved outside the Data namespace: {}",
+                page.title()
+            )
+        })?;
+    if !canonical_file_name.to_ascii_lowercase().ends_with(TAB_EXT) {
+        bail!("External table must resolve to a .tab page: Data:{canonical_file_name}");
+    }
+    Ok(canonical_file_name)
+}
+
+#[tracing::instrument(skip(bot, template), fields(graph_name = name, source_revision = rev_url))]
 async fn create_pages(
     bot: &Bot,
     template: &Node<NodeInnerTemplate>,
@@ -43,20 +137,46 @@ async fn create_pages(
     rev_url: &str,
 ) -> anyhow::Result<String> {
     let file_name = name.replace(' ', "_");
-    let tab_file_name = format!("Data:{file_name}{TAB_EXT}");
     let chart_file_name = format!("Data:{file_name}{CHART_EXT}");
     let mut modded_template = template.clone();
-    // width is handled separately
-    modded_template.params_remove("witdh");
-    let out = gen_graph_chart(name, &modded_template.params_map(), rev_url)?;
+    // These parameters control the article embedding or target file name, not the chart JSON.
+    modded_template.params_remove("width");
+    modded_template.params_remove("name");
+    let out = gen_graph_chart(name, &modded_template.params_map(), rev_url)
+        .with_context(|| format!("Failed to convert graph '{name}'"))?;
 
-    // Save the tab and chart files
-    let tab_text = serde_json::to_string_pretty(&out.tab)?;
-    let tab_file_page = bot.page(&tab_file_name)?;
-    if tab_file_page.exists().await? {
-        warn!("Tab file {tab_file_name} already exists, skipping creation.");
-    } else {
-        match tab_file_page
+    let (mut chart, generated_tab, data_file_name, data_mode) = match out {
+        ConversionOutput::GeneratedData { chart, tab } => {
+            let data_file_name = chart.source.clone();
+            (chart, Some(tab), data_file_name, "generated")
+        }
+        ConversionOutput::ExistingData {
+            chart,
+            tab_file_name,
+            x_field,
+        } => {
+            let canonical_file_name = load_external_tab(bot, &tab_file_name, x_field.as_deref())
+                .await
+                .with_context(|| format!("Failed to use external table Data:{tab_file_name}"))?;
+            (chart, None, canonical_file_name, "existing")
+        }
+    };
+    chart.source.clone_from(&data_file_name);
+    info!(
+        data_mode,
+        data_file = %format!("Data:{data_file_name}"),
+        chart_file = %chart_file_name,
+        "Prepared graph conversion"
+    );
+
+    if let Some(tab) = generated_tab {
+        let tab_file_name = format!("Data:{data_file_name}");
+        let tab_text = serde_json::to_string_pretty(&tab)
+            .with_context(|| format!("Failed to serialize {tab_file_name}"))?;
+        let tab_file_page = bot.page(&tab_file_name)?;
+        if tab_file_page.exists().await? {
+            warn!(tab_file = %tab_file_name, "Tab file already exists; skipping creation");
+        } else if let Err(error) = tab_file_page
             .save(
                 tab_text,
                 &SaveOptions::summary(&format!(
@@ -68,52 +188,54 @@ async fn create_pages(
             )
             .await
         {
-            Ok(_) => info!("Tab file {tab_file_name} created successfully."),
-            Err(e) => {
-                error!("Failed to create tab file {tab_file_name}: {e}");
-                warn!("Please create the tab file manually.");
-                warn!(
-                    "Tab file content ({tab_file_name}):\n{}",
-                    serde_json::to_string_pretty(&out.tab)?
-                );
-                return Err(e.into());
-            }
+            let error = anyhow::Error::from(error);
+            error!(
+                tab_file = %tab_file_name,
+                error = %format!("{error:#}"),
+                "Failed to create tab file"
+            );
+            return Err(error).with_context(|| format!("Failed to save {tab_file_name}"));
+        } else {
+            info!(tab_file = %tab_file_name, "Created tab file");
         }
     }
-    let chart_text = serde_json::to_string_pretty(&out.chart)?;
+
+    let chart_text = serde_json::to_string_pretty(&chart)
+        .with_context(|| format!("Failed to serialize {chart_file_name}"))?;
     let chart_file_page = bot.page(&chart_file_name)?;
     if chart_file_page.exists().await? {
-        warn!("Chart file {chart_file_name} already exists, skipping creation.");
+        warn!(chart_file = %chart_file_name, "Chart file already exists; skipping creation");
+    } else if let Err(error) = chart_file_page
+        .save(
+            chart_text,
+            &SaveOptions::summary(&format!(
+                "GraphBot: Create chart file with data from a {} template. Source: {}",
+                template.name_str(),
+                rev_url
+            ))
+            .mark_as_bot(true),
+        )
+        .await
+    {
+        let error = anyhow::Error::from(error);
+        error!(
+            chart_file = %chart_file_name,
+            error = %format!("{error:#}"),
+            "Failed to create chart file"
+        );
+        return Err(error).with_context(|| format!("Failed to save {chart_file_name}"));
     } else {
-        match chart_file_page
-            .save(
-                chart_text,
-                &SaveOptions::summary(&format!(
-                    "GraphBot: Create chart file with data from a {} template. Source: {}",
-                    template.name_str(),
-                    rev_url
-                ))
-                .mark_as_bot(true),
-            )
-            .await
-        {
-            Ok(_) => info!("Chart file {chart_file_name} created successfully."),
-            Err(e) => {
-                error!("Failed to create chart file {chart_file_name}: {e}");
-                warn!("Please create the chart file manually.");
-                warn!(
-                    "Chart file content ({chart_file_name}):\n{}",
-                    serde_json::to_string_pretty(&out.chart)?
-                );
-                return Err(e.into());
-            }
-        }
+        info!(chart_file = %chart_file_name, "Created chart file");
     }
-    info!("Successfully created tab and chart files for {name}.");
+
+    info!(
+        data_mode,
+        "Successfully prepared chart for article replacement"
+    );
     let inside = if let Some(width) = template.params_get("width").flatten() {
-        format!("Chart|definition={name}{CHART_EXT}|data={name}{TAB_EXT}|Width={width}")
+        format!("Chart|definition={name}{CHART_EXT}|data={data_file_name}|Width={width}")
     } else {
-        format!("Chart|definition={name}{CHART_EXT}|data={name}{TAB_EXT}")
+        format!("Chart|definition={name}{CHART_EXT}|data={data_file_name}")
     };
     Ok(format!("{}{inside}{}", "{{", "}}"))
 }
@@ -147,7 +269,42 @@ fn test_trim_comments() {
     assert_eq!(trim_comments(s), "--> No opening comment.");
 }
 
-#[tracing::instrument(skip(bot, parsed, page, rev_info, config))]
+#[test]
+fn validates_external_tab_schema() {
+    let content = r#"{
+        "schema": {
+            "fields": [
+                {"name": "date", "type": "string"},
+                {"name": "highTemp", "type": "number"},
+                {"name": "lowTemp", "type": "number"}
+            ]
+        }
+    }"#;
+
+    validate_external_tab_schema(content, "weather/Honolulu.tab", Some("date")).unwrap();
+}
+
+#[test]
+fn rejects_external_tab_with_wrong_x_field() {
+    let content = r#"{
+        "schema": {
+            "fields": [
+                {"name": "date", "type": "string"},
+                {"name": "temperature", "type": "number"}
+            ]
+        }
+    }"#;
+
+    let error =
+        validate_external_tab_schema(content, "weather/Honolulu.tab", Some("year")).unwrap_err();
+
+    assert!(error.to_string().contains("requests x='year'"));
+}
+
+#[tracing::instrument(
+    skip(bot, parsed, page, rev_info, config),
+    fields(template = %parsed.name_str().trim(), page = %page.title())
+)]
 async fn handle_template(
     bot: &Bot,
     parsed: Node<NodeInnerTemplate>,
@@ -279,15 +436,19 @@ pub async fn run_on_page(
 
     let mut tasks = vec![];
     for parsed in p.parsed.templates {
+        let template_name = parsed.name_str().trim().to_string();
+        let graph_name = parsed.params_get("name").flatten();
         tasks.push(async {
-            handle_template(commons_bot, parsed, page.clone(), rev_info.clone(), config).await
+            let result =
+                handle_template(commons_bot, parsed, page.clone(), rev_info.clone(), config).await;
+            (template_name, graph_name, result)
         });
     }
     let task_results = futures::future::join_all(tasks).await;
 
     let mut swaps = vec![];
     let mut errors = vec![];
-    for result in task_results {
+    for (template_name, graph_name, result) in task_results {
         match result {
             Ok(s) => {
                 if let Some(swap) = s {
@@ -295,7 +456,13 @@ pub async fn run_on_page(
                 }
             }
             Err(error) => {
-                error!("Error handling template: {error}");
+                error!(
+                    page = %page.title(),
+                    template = %template_name,
+                    graph_name = graph_name.as_deref().unwrap_or("<missing>"),
+                    error = %format!("{error:#}"),
+                    "Error handling graph template"
+                );
                 errors.push(error);
             }
         }
@@ -305,7 +472,11 @@ pub async fn run_on_page(
         if modified_wikitext.contains(&swap.from) {
             modified_wikitext = modified_wikitext.replace(&swap.from, &swap.to);
         } else {
-            warn!("Template {} not found in page {}", swap.from, page.title());
+            warn!(
+                page = %page.title(),
+                template_length = swap.from.len(),
+                "Original graph template was not found during replacement"
+            );
         }
     }
     // Save the modified wikitext back to the page
@@ -317,9 +488,14 @@ pub async fn run_on_page(
         let save_options = SaveOptions::summary("Port graphs to charts").mark_as_bot(true);
         match page.save(modified_wikitext, &save_options).await {
             Ok(_) => info!("Successfully updated page {title}"),
-            Err(e) => {
-                error!("Failed to update page {title}: {e}");
-                bail!("Failed to update page {title}: {e}");
+            Err(error) => {
+                let error = anyhow::Error::from(error);
+                error!(
+                    page = %title,
+                    error = %format!("{error:#}"),
+                    "Failed to update page"
+                );
+                return Err(error).with_context(|| format!("Failed to update page {title}"));
             }
         }
     }
@@ -342,9 +518,13 @@ async fn page_handler(
         let mut rx_lock = rx.lock().await;
         if let Some((page, rev_info, result_handler)) = rx_lock.recv().await {
             drop(rx_lock);
-            result_handler
+            let page_title = page.title().to_string();
+            if result_handler
                 .send(run_on_page(page, rev_info, &commons_bot, &wiki_bot, &config).await)
-                .unwrap();
+                .is_err()
+            {
+                warn!(page = %page_title, "Page result receiver was dropped");
+            }
         } else {
             // Channel closed, exit the loop
             info!("Page request channel closed, exiting worker.");
@@ -388,9 +568,12 @@ pub async fn graph_task(
 ) -> anyhow::Result<()> {
     // check for parser load
     // if parsing nothing fails, it must be not running or very broken
-    if let Err(e) = call_parser("", &config).await {
-        error!("Parser failed to parse empty string, are you sure the server is running? {e}");
-        return Err(e);
+    if let Err(error) = call_parser("", &config).await {
+        error!(
+            error = %format!("{error:#}"),
+            "Parser failed to parse empty input; the parser service may be unavailable"
+        );
+        return Err(error);
     }
     info!("Starting Graph Port task");
     let failed_revs = Arc::new(FailedRevs::load(&config).await?);
@@ -452,16 +635,31 @@ pub async fn graph_task(
                 async move {
                     match rec.await {
                         Ok(result) => {
-                            if let Err(e) = result {
-                                error!("Error processing page: {e}");
+                            if let Err(error) = result {
+                                error!(
+                                    page = %page_title,
+                                    revision_id = rev_info.as_ref().map(|rev| rev.id),
+                                    error = %format!("{error:#}"),
+                                    "Error processing page"
+                                );
                                 if let Some(rev_info) = rev_info {
-                                    failed_revs.insert(rev_info, e).await.unwrap_or_else(|e| {
-                                        error!("Failed to insert failed revision: {e}");
-                                    });
+                                    failed_revs.insert(rev_info, error).await.unwrap_or_else(
+                                        |db_error| {
+                                            error!(
+                                                page = %page_title,
+                                                error = %format!("{db_error:#}"),
+                                                "Failed to record failed revision"
+                                            );
+                                        },
+                                    );
                                 }
                             }
                         }
-                        Err(e) => error!("Failed to receive result: {e}"),
+                        Err(error) => error!(
+                            page = %page_title,
+                            error = %error,
+                            "Failed to receive page result"
+                        ),
                     }
                 }
             });

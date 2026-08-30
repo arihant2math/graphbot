@@ -75,10 +75,12 @@ fn parse_number(value: &str) -> Option<Number> {
 }
 
 #[cfg(test)]
-mod number_parse_tests {
+mod tests {
+    use std::collections::HashMap;
+
     use serde_json::Number;
 
-    use super::parse_number;
+    use super::{generate, parse_number};
 
     #[test]
     #[allow(clippy::approx_constant)]
@@ -93,6 +95,18 @@ mod number_parse_tests {
         assert_eq!(parse_number("not a number"), None);
         assert_eq!(parse_number(""), None);
         assert_eq!(parse_number(".42"), Number::from_f64(0.42));
+    }
+
+    #[test]
+    fn graph_without_y_values_returns_error() {
+        let tag = HashMap::from([("x".to_string(), Some("1,2,3".to_string()))]);
+
+        let result = generate("No y values", &tag, "https://example.com");
+
+        assert_eq!(
+            result.err().map(|error| error.to_string()).as_deref(),
+            Some("Neither 'y' nor 'y1' present")
+        );
     }
 }
 
@@ -316,7 +330,7 @@ fn gen_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::R
             .cloned()
             .unwrap_or_default()
             .map(LocalizableString::en),
-        schema: gen_fields(tag, x_type, y_type).into(),
+        schema: gen_fields(tag, x_type, y_type)?.into(),
         data: x_values
             .into_iter()
             .enumerate()
@@ -341,7 +355,7 @@ fn gen_fields(
     tag: &HashMap<String, Option<String>>,
     x_type: ValueType,
     y_type: ValueType,
-) -> Vec<Field> {
+) -> anyhow::Result<Vec<Field>> {
     let mut fields = vec![Field {
         name: "x".to_string(),
         r#type: x_type.to_string(),
@@ -384,7 +398,9 @@ fn gen_fields(
             }
             counter += 1;
         }
-        assert_ne!(counter, 1);
+        if counter == 1 {
+            bail!("Neither 'y' nor 'y1' present");
+        }
         for i in 1..counter {
             let y_field = Field {
                 name: format!("y{i}"),
@@ -398,7 +414,7 @@ fn gen_fields(
             fields.push(y_field);
         }
     }
-    fields
+    Ok(fields)
 }
 
 fn gen_pie_tab(tag: &HashMap<String, Option<String>>, source_url: &str) -> anyhow::Result<Tab> {
